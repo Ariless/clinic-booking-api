@@ -1,0 +1,16 @@
+services:
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_PATH: ./data/clinic.db
+      JWT_SECRET: ${JWT_SECRET:-change-me-for-docker-demo}
+      TRUST_PROXY: "true"
+    volumes:
+      - clinic-data:/app/data
+
+volumes:
+  clinic-data:

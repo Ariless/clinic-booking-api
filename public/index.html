@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Home — Clinic booking</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body data-qa="page-home">
+    <header class="site-header" data-qa="site-header">
+      <div class="header-left">
+        <a class="brand" href="/" data-qa="site-brand">Clinic booking</a>
+      </div>
+      <nav class="user-nav" aria-label="Account" data-qa="site-user-nav">
+        <span id="navAuth" class="muted" style="margin: 0" data-qa="site-auth-label"></span>
+        <a href="/login" id="loginNav" data-qa="site-login">Sign in</a>
+        <button type="button" id="logoutBtn" class="secondary" style="display: none; margin-top: 0" data-qa="site-logout">
+          Sign out
+        </button>
+      </nav>
+    </header>
+
+    <section data-qa="home-main">
+      <h1 style="margin: 0 0 0.5rem; font-size: 1.15rem; font-weight: 600">Welcome</h1>
+      <div id="roleIntro"></div>
+      <p id="guestActions" class="muted" style="margin: 0.75rem 0 0">
+        <button type="button" class="secondary" id="guestFromHome" style="margin-top: 0" data-qa="home-guest-continue">
+          Continue as guest
+        </button>
+        <span style="margin: 0 0.5rem">·</span>
+        <a href="/register" data-qa="home-link-register">Create an account</a>
+        <span style="margin: 0 0.5rem">·</span>
+        <a href="/login" data-qa="home-link-login-guest">Sign in</a>
+      </p>
+      <p id="signedInGuest" class="muted" style="margin: 0.65rem 0 0; display: none">
+        Prefer not to keep this session on this device?
+        <button type="button" class="secondary" id="guestClearSignedIn" style="margin-top: 0" data-qa="home-guest-clear">
+          Continue as guest
+        </button>
+        <span style="margin: 0 0.45rem">·</span>
+        <a href="/register" data-qa="home-link-register-alt">Register another role</a>
+      </p>
+      <div class="hub-grid" style="margin-top: 1rem">
+        <div class="hub-card" data-hub-workspace="patient" data-qa="home-hub-patient-card">
+          <h2>Patient</h2>
+          <p>Book visits, check openings, and manage your file as a patient.</p>
+          <a class="action" href="/patient" data-qa="home-hub-patient-link">Open patient area</a>
+        </div>
+        <div class="hub-card" data-hub-workspace="doctor" data-qa="home-hub-doctor-card">
+          <h2>Doctor</h2>
+          <p>Review requests and your diary as a clinician.</p>
+          <a class="action" href="/doctor" data-qa="home-hub-doctor-link">Open clinician area</a>
+        </div>
+      </div>
+    </section>
+
+    <script src="/js/app-core.js"></script>
+    <script src="/js/app-nav.js"></script>
+    <script>
+      (function () {
+        const roleIntro = document.getElementById("roleIntro");
+        const guestActions = document.getElementById("guestActions");
+        const signedInGuest = document.getElementById("signedInGuest");
+
+        function renderIntro() {
+          const u = window.ClinicApp.getUser();
+          if (!u) {
+            roleIntro.innerHTML =
+              '<p class="muted" style="margin:0">You’re browsing as a <strong>guest</strong>. Open the patient area below to browse times (saving a visit needs an account), or <a href="/login?next=' +
+              encodeURIComponent("/doctor") +
+              '">sign in as a clinician</a> for the doctor workspace.</p>';
+            guestActions.style.display = "block";
+            signedInGuest.style.display = "none";
+            return;
+          }
+          guestActions.style.display = "none";
+          signedInGuest.style.display = "block";
+          if (u.role === "patient") {
+            roleIntro.innerHTML = `<p class="muted" style="margin:0">Signed in as <strong>${escape(u.email)}</strong> (patient). Open your area below, or <a href="/register">create another account type</a> after signing out.</p>`;
+          } else if (u.role === "doctor") {
+            roleIntro.innerHTML = `<p class="muted" style="margin:0">Signed in as <strong>${escape(u.email)}</strong> (clinician). Your workspace is under Doctor below.</p>`;
+          } else {
+            roleIntro.innerHTML = `<p class="muted" style="margin:0">Signed in as <strong>${escape(u.email)}</strong> (${escape(u.role)}). Use the area that matches what you’re testing.</p>`;
+          }
+        }
+
+        function escape(s) {
+          return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+        }
+
+        function goGuest() {
+          window.ClinicApp.clearSession();
+          window.ClinicNav.refresh();
+          renderIntro();
+        }
+        document.getElementById("guestFromHome").addEventListener("click", goGuest);
+        document.getElementById("guestClearSignedIn").addEventListener("click", goGuest);
+
+        window.ClinicNav.refresh();
+        renderIntro();
+        window.ClinicNav.bindLogout(() => {
+          renderIntro();
+        });
+      })();
+    </script>
+  </body>
+</html>

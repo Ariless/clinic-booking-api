@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Patient — Booking</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body data-qa="page-patient-booking">
+    <header class="site-header" data-qa="site-header">
+      <div class="header-left">
+        <a class="brand" href="/" data-qa="site-brand">Clinic booking</a>
+      </div>
+      <nav class="user-nav" aria-label="Account" data-qa="site-user-nav">
+        <span id="navAuth" class="muted" style="margin: 0" data-qa="site-auth-label"></span>
+        <a href="/login" id="loginNav" data-qa="site-login">Sign in</a>
+        <button type="button" id="logoutBtn" class="secondary" style="display: none; margin-top: 0" data-qa="site-logout">
+          Sign out
+        </button>
+      </nav>
+    </header>
+
+    <nav class="patient-subnav" aria-label="Patient workspace" data-qa="patient-nav">
+      <a href="/patient" data-patient-nav="dashboard" data-qa="patient-nav-dashboard">Dashboard</a>
+      <a href="/patient/booking" data-patient-nav="booking" data-qa="patient-nav-booking">Booking</a>
+      <a href="/patient/schedule" data-patient-nav="schedule" data-qa="patient-nav-schedule">Schedule</a>
+      <a href="/patient/appointments" data-patient-nav="appointments" data-qa="patient-nav-appointments">Appointments</a>
+      <a href="/patient/account" data-patient-nav="account" data-qa="patient-nav-account">Account</a>
+    </nav>
+
+    <p class="muted" style="margin: 0 0 1rem">
+      Choose a <strong>specialty</strong>, then a <strong>clinician</strong>, then a <strong>day</strong> and
+      <strong>time</strong>. Signed-in patients don’t need to type their clinic reference number — it’s filled for you.
+    </p>
+    <p id="scheduleDeepLinkPara" class="muted" style="margin: 0 0 1rem; display: none" data-qa="booking-deeplink-wrap">
+      <a id="scheduleDeepLink" href="#" data-qa="booking-deeplink-schedule">Only check times for this clinician →</a>
+    </p>
+
+    <div id="bannerError" class="banner-error" role="alert" data-qa="booking-banner-error"></div>
+
+    <section id="sectionDoctors" data-qa="booking-section-clinician">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem">Clinician</h2>
+      <div id="doctorsEmpty" class="empty-panel" style="display: none" data-qa="booking-doctors-empty">
+        No clinicians are available in the directory yet.
+      </div>
+      <div id="doctorsWrap" data-qa="booking-doctors-wrap">
+        <label for="specialty">Specialty</label>
+        <select id="specialty" aria-describedby="hintDoctor" data-qa="booking-specialty">
+          <option value="">Loading…</option>
+        </select>
+        <label for="doctor" style="margin-top: 0.65rem">Clinician</label>
+        <select id="doctor" disabled aria-describedby="hintDoctor" data-qa="booking-doctor">
+          <option value="">— choose specialty first —</option>
+        </select>
+        <p id="hintDoctor" class="field-hint">Pick a specialty, then a name. Open times for that person load below.</p>
+      </div>
+    </section>
+
+    <section data-qa="booking-section-slots">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="booking-slots-title">Pick a time</h2>
+      <div id="slotsEmpty" class="empty-panel" style="display: none" data-qa="booking-slots-empty">
+        No open appointments for this clinician right now.
+      </div>
+      <p id="slotsMeta" class="muted" style="margin: 0 0 0.75rem; display: none" data-qa="booking-slots-meta"></p>
+      <div id="slotPickWrap" style="display: none" data-qa="booking-slot-pickers">
+        <label for="slotDay">Day</label>
+        <select id="slotDay" aria-describedby="hintSlot" data-qa="booking-slot-day">
+          <option value="">— Choose a day —</option>
+        </select>
+        <label for="slotTime" style="margin-top: 0.65rem">Time</label>
+        <select id="slotTime" disabled aria-describedby="hintSlot" data-qa="booking-slot-time">
+          <option value="">— Choose a time —</option>
+        </select>
+        <p id="hintSlot" class="field-hint">Only times that are still free are listed. Change the day to see other openings.</p>
+      </div>
+    </section>
+
+    <section data-qa="booking-section-confirm">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="booking-confirm-title">Confirm booking</h2>
+      <div id="guestBookGate" class="empty-panel" style="display: none" data-qa="booking-guest-gate">
+        <p style="margin: 0 0 0.5rem">
+          As a guest you can look through specialties, clinicians, and times above. To <strong>save</strong> this visit,
+          sign in or create a patient account.
+        </p>
+        <p style="margin: 0">
+          <a id="loginToBook" href="/login" data-qa="booking-guest-login">Sign in</a> ·
+          <a href="/register/patient" data-qa="booking-guest-register">Create patient account</a>
+        </p>
+      </div>
+      <div id="patientBookForm" style="display: none" data-qa="booking-patient-form">
+        <p class="muted" style="margin: 0 0 0.65rem">
+          Your visit will be tied to the signed-in patient profile below.
+        </p>
+        <label for="patientId">Clinic file number (read-only)</label>
+        <input id="patientId" type="number" min="1" step="1" inputmode="numeric" value="" readonly data-qa="booking-patient-id" />
+        <p id="hintPatient" class="field-hint"></p>
+        <p id="formMsg" class="form-msg" role="alert" data-qa="booking-form-message"></p>
+        <div>
+          <button type="button" id="book" data-qa="booking-submit">Request this visit</button>
+        </div>
+        <p id="bookSuccessMsg" class="form-msg-success" role="status" data-qa="booking-success-message"></p>
+        <p id="bookHint" class="muted" style="display: none; margin-top: 0.65rem"></p>
+        <p class="muted" style="margin-top: 0.65rem">
+          When it goes through, you’ll see it under <a href="/patient/appointments">Appointments</a>.
+        </p>
+      </div>
+    </section>
+
+    <details class="technical" data-qa="booking-tech-details">
+      <summary>Technical details (optional)</summary>
+      <pre id="log" style="margin-top: 0.5rem" data-qa="booking-tech-log">—</pre>
+    </details>
+
+    <script src="/js/app-core.js"></script>
+    <script src="/js/app-nav.js"></script>
+    <script src="/js/patient-shell.js"></script>
+    <script src="/js/directory-by-specialty.js"></script>
+    <script>
+      (function () {
+        if (!window.ClinicPatientShell.guardDoctorRedirect()) {
+          return;
+        }
+        window.ClinicPatientShell.setActiveNav("booking");
+
+        const logEl = document.getElementById("log");
+        const specialtyEl = document.getElementById("specialty");
+        const doctorEl = document.getElementById("doctor");
+        /** @type {Array<{id:number,name:string,specialty:string}>} */
+        let allDoctors = [];
+        const slotDayEl = document.getElementById("slotDay");
+        const slotTimeEl = document.getElementById("slotTime");
+        const slotsMeta = document.getElementById("slotsMeta");
+        const slotPickWrap = document.getElementById("slotPickWrap");
+        const bookBtnEl = document.getElementById("book");
+        const bookHintEl = document.getElementById("bookHint");
+        const patientIdEl = document.getElementById("patientId");
+        const hintPatientEl = document.getElementById("hintPatient");
+        const formMsgEl = document.getElementById("formMsg");
+        const guestBookGate = document.getElementById("guestBookGate");
+        const patientBookForm = document.getElementById("patientBookForm");
+        const loginToBook = document.getElementById("loginToBook");
+        const bannerError = document.getElementById("bannerError");
+        const bookSuccessMsg = document.getElementById("bookSuccessMsg");
+        const doctorsEmpty = document.getElementById("doctorsEmpty");
+        const doctorsWrap = document.getElementById("doctorsWrap");
+        const slotsEmpty = document.getElementById("slotsEmpty");
+        const scheduleDeepLinkPara = document.getElementById("scheduleDeepLinkPara");
+        const scheduleDeepLink = document.getElementById("scheduleDeepLink");
+
+        function log(obj) {
+          logEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+        }
+
+        /** @type {Map<string, Array<{id:number,startTime:string,endTime:string}>>} */
+        let slotsByDay = new Map();
+
+        function localDayKey(iso) {
+          const d = new Date(iso);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
+        }
+
+        function formatDayLabel(dayKey) {
+          const parts = dayKey.split("-").map(Number);
+          if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
+            return dayKey;
+          }
+          const d = new Date(parts[0], parts[1] - 1, parts[2]);
+          return d.toLocaleDateString(undefined, {
+            weekday: "long",
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+        }
+
+        function formatTimeRange(startIso, endIso) {
+          const a = new Date(startIso);
+          const b = new Date(endIso);
+          const opt = { hour: "2-digit", minute: "2-digit" };
+          return `${a.toLocaleTimeString(undefined, opt)} – ${b.toLocaleTimeString(undefined, opt)}`;
+        }
+
+        function resetSlotPickers() {
+          slotsByDay = new Map();
+          slotDayEl.innerHTML = "";
+          slotDayEl.appendChild(new Option("— Choose a day —", ""));
+          slotTimeEl.innerHTML = "";
+          slotTimeEl.appendChild(new Option("— Choose a time —", ""));
+          slotTimeEl.disabled = true;
+          slotsMeta.style.display = "none";
+          slotsMeta.textContent = "";
+          slotPickWrap.style.display = "none";
+        }
+
+        function fillTimeOptionsForDay(dayKey) {
+          slotTimeEl.innerHTML = "";
+          slotTimeEl.appendChild(new Option("— Choose a time —", ""));
+          const list = slotsByDay.get(dayKey);
+          if (!list || !list.length) {
+            slotTimeEl.disabled = true;
+            return;
+          }
+          for (const s of list) {
+            slotTimeEl.appendChild(
+              new Option(formatTimeRange(s.startTime, s.endTime), String(s.id))
+            );
+          }
+          slotTimeEl.disabled = false;
+        }
+
+        function hideBookSuccess() {
+          bookSuccessMsg.textContent = "";
+          bookSuccessMsg.classList.remove("is-visible");
+        }
+
+        function hideBanners() {
+          bannerError.style.display = "none";
+          bannerError.textContent = "";
+          hideBookSuccess();
+        }
+
+        function showBookSuccess(text) {
+          bannerError.style.display = "none";
+          bannerError.textContent = "";
+          bookSuccessMsg.textContent = text;
+          bookSuccessMsg.classList.add("is-visible");
+        }
+
+        function showBannerError(text) {
+          hideBanners();
+          bannerError.textContent = text;
+          bannerError.style.display = "block";
+        }
+
+        function bookingNextPath() {
+          return window.location.pathname + (window.location.search || "");
+        }
+
+        function applyBookingSessionUi() {
+          window.ClinicNav.refresh();
+          const user = window.ClinicApp.getUser();
+          loginToBook.href = "/login?next=" + encodeURIComponent(bookingNextPath());
+          if (user && user.role === "patient") {
+            guestBookGate.style.display = "none";
+            patientBookForm.style.display = "block";
+            patientIdEl.value = String(user.id);
+            hintPatientEl.textContent = "This value is sent with your booking request automatically.";
+            bookBtnEl.disabled = false;
+            bookHintEl.style.display = "none";
+          } else {
+            guestBookGate.style.display = "block";
+            patientBookForm.style.display = "none";
+            bookBtnEl.disabled = true;
+            bookHintEl.style.display = "none";
+          }
+          formMsgEl.textContent = "";
+          hideBookSuccess();
+        }
+
+        function refillDoctorSelectForSpecialty() {
+          const spec = specialtyEl.value;
+          doctorEl.innerHTML = "";
+          doctorEl.appendChild(new Option(spec ? "— choose clinician —" : "— choose specialty first —", ""));
+          if (!spec) {
+            doctorEl.disabled = true;
+            return;
+          }
+          const list = window.ClinicDirectoryBySpecialty.doctorsForSpecialty(allDoctors, spec);
+          for (const d of list) {
+            doctorEl.appendChild(new Option(d.name, String(d.id)));
+          }
+          doctorEl.disabled = list.length === 0;
+        }
+
+        async function loadDoctors() {
+          specialtyEl.innerHTML = "";
+          doctorEl.innerHTML = "";
+          doctorEl.appendChild(new Option("— choose specialty first —", ""));
+          doctorEl.disabled = true;
+          doctorsWrap.style.display = "none";
+          doctorsEmpty.style.display = "none";
+          try {
+            const doctors = await window.ClinicApp.api("/api/v1/doctors");
+            if (!doctors.length) {
+              doctorsEmpty.style.display = "block";
+              return;
+            }
+            allDoctors = doctors;
+            doctorsWrap.style.display = "block";
+            specialtyEl.appendChild(new Option("— choose specialty —", ""));
+            for (const s of window.ClinicDirectoryBySpecialty.listSpecialties(allDoctors)) {
+              specialtyEl.appendChild(new Option(s, s));
+            }
+          } catch (e) {
+            doctorsEmpty.textContent = "We couldn’t load the clinician list. Check your connection and try again.";
+            doctorsEmpty.style.display = "block";
+            log({ status: e.status, body: e.body });
+          }
+        }
+
+        async function applyDoctorFromUrl() {
+          const raw = new URLSearchParams(window.location.search).get("doctorId");
+          if (!raw) {
+            return;
+          }
+          const id = String(Number(raw));
+          if (!Number.isInteger(Number(id)) || Number(id) < 1) {
+            return;
+          }
+          const doc = window.ClinicDirectoryBySpecialty.findDoctorById(allDoctors, id);
+          if (!doc) {
+            showBannerError("The clinician id from the link wasn’t found. Choose specialty and clinician from the lists.");
+            return;
+          }
+          specialtyEl.value = doc.specialty;
+          refillDoctorSelectForSpecialty();
+          doctorEl.value = id;
+          updateScheduleDeepLink();
+          await loadSlots(id);
+        }
+
+        async function loadSlots(doctorId) {
+          resetSlotPickers();
+          slotsEmpty.style.display = "none";
+          if (!doctorId) {
+            return;
+          }
+          try {
+            const slots = await window.ClinicApp.api(
+              `/api/v1/doctors/${encodeURIComponent(doctorId)}/slots`
+            );
+            if (!slots.length) {
+              slotsEmpty.style.display = "block";
+              return;
+            }
+            slotsByDay = new Map();
+            for (const s of slots) {
+              const key = localDayKey(s.startTime);
+              if (!slotsByDay.has(key)) {
+                slotsByDay.set(key, []);
+              }
+              slotsByDay.get(key).push(s);
+            }
+            const dayKeys = [...slotsByDay.keys()].sort();
+            slotDayEl.innerHTML = "";
+            slotDayEl.appendChild(new Option("— Choose a day —", ""));
+            for (const key of dayKeys) {
+              const n = slotsByDay.get(key).length;
+              slotDayEl.appendChild(new Option(`${formatDayLabel(key)} (${n} opening${n === 1 ? "" : "s"})`, key));
+            }
+            slotPickWrap.style.display = "block";
+            const distinctDays = dayKeys.length;
+            slotsMeta.textContent = `${slots.length} opening${slots.length === 1 ? "" : "s"} across ${distinctDays} calendar day${distinctDays === 1 ? "" : "s"}.`;
+            slotsMeta.style.display = "block";
+            slotDayEl.value = dayKeys[0];
+            fillTimeOptionsForDay(dayKeys[0]);
+          } catch (e) {
+            slotsEmpty.textContent = "Couldn’t load times for this clinician.";
+            slotsEmpty.style.display = "block";
+            log({ status: e.status, body: e.body });
+          }
+        }
+
+        function validateBooking() {
+          formMsgEl.textContent = "";
+          const user = window.ClinicApp.getUser();
+          if (!user || user.role !== "patient") {
+            formMsgEl.textContent = "Sign in as a patient to confirm this visit.";
+            return null;
+          }
+          const slotRaw = slotTimeEl.value;
+          const slotId = Number(slotRaw);
+          if (!slotRaw || !Number.isInteger(slotId) || slotId < 1) {
+            formMsgEl.textContent = "Choose a day and a time from the menus above.";
+            return null;
+          }
+          return { slotId };
+        }
+
+        window.ClinicNav.bindLogout(() => {
+          hideBanners();
+          log("Signed out.");
+          applyBookingSessionUi();
+        });
+
+        function updateScheduleDeepLink() {
+          const id = doctorEl.value;
+          if (id) {
+            scheduleDeepLink.href = `/patient/schedule?doctorId=${encodeURIComponent(id)}`;
+            scheduleDeepLinkPara.style.display = "block";
+          } else {
+            scheduleDeepLinkPara.style.display = "none";
+          }
+        }
+
+        slotDayEl.addEventListener("change", () => {
+          formMsgEl.textContent = "";
+          const key = slotDayEl.value;
+          slotTimeEl.innerHTML = "";
+          slotTimeEl.appendChild(new Option("— Choose a time —", ""));
+          if (!key) {
+            slotTimeEl.disabled = true;
+            return;
+          }
+          fillTimeOptionsForDay(key);
+        });
+
+        specialtyEl.addEventListener("change", async () => {
+          hideBanners();
+          formMsgEl.textContent = "";
+          refillDoctorSelectForSpecialty();
+          resetSlotPickers();
+          slotsEmpty.style.display = "none";
+          updateScheduleDeepLink();
+          try {
+            await loadSlots(doctorEl.value);
+            log("Specialty changed.");
+          } catch (e) {
+            showBannerError("We couldn’t refresh the open times.");
+            log({ status: e.status, body: e.body });
+          }
+        });
+
+        doctorEl.addEventListener("change", async () => {
+          hideBanners();
+          updateScheduleDeepLink();
+          try {
+            await loadSlots(doctorEl.value);
+            log("Times updated.");
+          } catch (e) {
+            showBannerError("We couldn’t refresh the open times.");
+            log({ status: e.status, body: e.body });
+          }
+        });
+
+        document.getElementById("book").addEventListener("click", async () => {
+          hideBanners();
+          const parsed = validateBooking();
+          if (!parsed) {
+            return;
+          }
+          try {
+            const created = await window.ClinicApp.api("/api/v1/appointments", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ slotId: parsed.slotId }),
+            });
+            log(created);
+            showBookSuccess("Visit request saved — check Appointments for status.");
+            slotTimeEl.value = "";
+            await loadSlots(doctorEl.value);
+          } catch (e) {
+            hideBookSuccess();
+            const msg =
+              e.body && typeof e.body === "object" && e.body.message
+                ? String(e.body.message)
+                : "We couldn’t complete the booking. Pick another time or try again in a moment.";
+            formMsgEl.textContent = msg;
+            log({ status: e.status, body: e.body });
+          }
+        });
+
+        (async () => {
+          try {
+            applyBookingSessionUi();
+            await loadDoctors();
+            await applyDoctorFromUrl();
+            updateScheduleDeepLink();
+            log("Ready.");
+          } catch (e) {
+            showBannerError("Something went wrong while opening this page.");
+            log({ status: e.status, body: e.body });
+          }
+        })();
+      })();
+    </script>
+  </body>
+</html>

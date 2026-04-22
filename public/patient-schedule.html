@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Patient — Schedule</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body data-qa="page-patient-schedule">
+    <header class="site-header" data-qa="site-header">
+      <div class="header-left">
+        <a class="brand" href="/" data-qa="site-brand">Clinic booking</a>
+      </div>
+      <nav class="user-nav" aria-label="Account" data-qa="site-user-nav">
+        <span id="navAuth" class="muted" style="margin: 0" data-qa="site-auth-label"></span>
+        <a href="/login" id="loginNav" data-qa="site-login">Sign in</a>
+        <button type="button" id="logoutBtn" class="secondary" style="display: none; margin-top: 0" data-qa="site-logout">
+          Sign out
+        </button>
+      </nav>
+    </header>
+
+    <nav class="patient-subnav" aria-label="Patient workspace" data-qa="patient-nav">
+      <a href="/patient" data-patient-nav="dashboard" data-qa="patient-nav-dashboard">Dashboard</a>
+      <a href="/patient/booking" data-patient-nav="booking" data-qa="patient-nav-booking">Booking</a>
+      <a href="/patient/schedule" data-patient-nav="schedule" data-qa="patient-nav-schedule">Schedule</a>
+      <a href="/patient/appointments" data-patient-nav="appointments" data-qa="patient-nav-appointments">Appointments</a>
+      <a href="/patient/account" data-patient-nav="account" data-qa="patient-nav-account">Account</a>
+    </nav>
+
+    <p class="muted" style="margin: 0 0 1rem">
+      This page only lists times that are still free. To reserve one, open
+      <a href="/patient/booking">Booking</a> and choose the day and time from the menus.
+    </p>
+    <p id="deepLinkNote" class="muted" style="margin: 0 0 1rem; display: none" data-qa="schedule-deeplink-note"></p>
+
+    <section data-qa="schedule-section-clinician">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="schedule-clinician-title">Clinician</h2>
+      <div id="doctorsEmpty" class="empty-panel" style="display: none" data-qa="schedule-doctors-empty">No clinicians are listed yet.</div>
+      <div id="doctorsWrap" data-qa="schedule-doctors-wrap">
+        <label for="specialty">Specialty</label>
+        <select id="specialty" aria-describedby="hintDoctor" data-qa="schedule-specialty">
+          <option value="">Loading…</option>
+        </select>
+        <label for="doctor" style="margin-top: 0.65rem">Clinician</label>
+        <select id="doctor" disabled aria-describedby="hintDoctor" data-qa="schedule-doctor">
+          <option value="">— choose specialty first —</option>
+        </select>
+        <p id="hintDoctor" class="field-hint">Choose a specialty, then a clinician, to load their free openings.</p>
+      </div>
+    </section>
+
+    <section data-qa="schedule-section-openings">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="schedule-openings-title">Openings</h2>
+      <div id="slotsEmpty" class="empty-panel" style="display: none" data-qa="schedule-slots-empty">No free slots for this clinician.</div>
+      <ul id="slots" data-qa="schedule-slots-list"></ul>
+    </section>
+
+    <details class="technical" data-qa="schedule-tech-details">
+      <summary>Technical details (optional)</summary>
+      <pre id="log" style="margin-top: 0.5rem" data-qa="schedule-tech-log">—</pre>
+    </details>
+
+    <script src="/js/app-core.js"></script>
+    <script src="/js/app-nav.js"></script>
+    <script src="/js/patient-shell.js"></script>
+    <script src="/js/directory-by-specialty.js"></script>
+    <script>
+      (function () {
+        if (!window.ClinicPatientShell.guardDoctorRedirect()) {
+          return;
+        }
+        window.ClinicPatientShell.setActiveNav("schedule");
+
+        const logEl = document.getElementById("log");
+        const specialtyEl = document.getElementById("specialty");
+        const doctorEl = document.getElementById("doctor");
+        /** @type {Array<{id:number,name:string,specialty:string}>} */
+        let allDoctors = [];
+        const slotsEl = document.getElementById("slots");
+        const doctorsEmpty = document.getElementById("doctorsEmpty");
+        const doctorsWrap = document.getElementById("doctorsWrap");
+        const slotsEmpty = document.getElementById("slotsEmpty");
+        const deepLinkNote = document.getElementById("deepLinkNote");
+
+        function log(obj) {
+          logEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+        }
+
+        function refillDoctorSelectForSpecialty() {
+          const spec = specialtyEl.value;
+          doctorEl.innerHTML = "";
+          doctorEl.appendChild(new Option(spec ? "— choose clinician —" : "— choose specialty first —", ""));
+          if (!spec) {
+            doctorEl.disabled = true;
+            return;
+          }
+          const list = window.ClinicDirectoryBySpecialty.doctorsForSpecialty(allDoctors, spec);
+          for (const d of list) {
+            doctorEl.appendChild(new Option(d.name, String(d.id)));
+          }
+          doctorEl.disabled = list.length === 0;
+        }
+
+        async function loadDoctors() {
+          specialtyEl.innerHTML = "";
+          doctorEl.innerHTML = "";
+          doctorEl.appendChild(new Option("— choose specialty first —", ""));
+          doctorEl.disabled = true;
+          doctorsWrap.style.display = "none";
+          doctorsEmpty.style.display = "none";
+          try {
+            const doctors = await window.ClinicApp.api("/api/v1/doctors");
+            if (!doctors.length) {
+              doctorsEmpty.style.display = "block";
+              return;
+            }
+            allDoctors = doctors;
+            doctorsWrap.style.display = "block";
+            specialtyEl.appendChild(new Option("— choose specialty —", ""));
+            for (const s of window.ClinicDirectoryBySpecialty.listSpecialties(allDoctors)) {
+              specialtyEl.appendChild(new Option(s, s));
+            }
+          } catch (e) {
+            doctorsEmpty.textContent = "Couldn’t load the directory.";
+            doctorsEmpty.style.display = "block";
+            log({ status: e.status, body: e.body });
+          }
+        }
+
+        async function loadSlots(doctorId) {
+          const prevScrollY = window.scrollY;
+          window.ClinicApp.blurActiveWithin(slotsEl);
+          slotsEl.innerHTML = "";
+          slotsEmpty.style.display = "none";
+          if (!doctorId) {
+            window.ClinicApp.restoreScrollY(prevScrollY);
+            return;
+          }
+          try {
+            const slots = await window.ClinicApp.api(
+              `/api/v1/doctors/${encodeURIComponent(doctorId)}/slots`
+            );
+            if (!slots.length) {
+              slotsEmpty.style.display = "block";
+              window.ClinicApp.restoreScrollY(prevScrollY);
+              return;
+            }
+            for (const s of slots) {
+              const li = document.createElement("li");
+              li.setAttribute("data-qa", "patient-schedule-slot");
+              li.dataset.slotId = String(s.id);
+              li.textContent = `${s.id} — ${s.startTime} → ${s.endTime}`;
+              slotsEl.appendChild(li);
+            }
+            window.ClinicApp.restoreScrollY(prevScrollY);
+          } catch (e) {
+            slotsEmpty.textContent = "Couldn’t load openings.";
+            slotsEmpty.style.display = "block";
+            window.ClinicApp.restoreScrollY(prevScrollY);
+            log({ status: e.status, body: e.body });
+          }
+        }
+
+        async function applyDoctorFromUrl() {
+          const raw = new URLSearchParams(window.location.search).get("doctorId");
+          if (!raw) {
+            return;
+          }
+          const id = String(Number(raw));
+          if (!Number.isInteger(Number(id)) || Number(id) < 1) {
+            return;
+          }
+          const doc = window.ClinicDirectoryBySpecialty.findDoctorById(allDoctors, id);
+          if (!doc) {
+            deepLinkNote.textContent =
+              "The clinician id from the link wasn’t found in the directory. Choose specialty and clinician from the lists.";
+            deepLinkNote.style.display = "block";
+            return;
+          }
+          specialtyEl.value = doc.specialty;
+          refillDoctorSelectForSpecialty();
+          doctorEl.value = id;
+          deepLinkNote.textContent = "We pre-selected specialty and clinician from your link.";
+          deepLinkNote.style.display = "block";
+          await loadSlots(id);
+        }
+
+        window.ClinicNav.bindLogout(() => {
+          window.ClinicNav.refresh();
+        });
+
+        specialtyEl.addEventListener("change", async () => {
+          refillDoctorSelectForSpecialty();
+          try {
+            await loadSlots(doctorEl.value);
+            log("Specialty changed.");
+          } catch (e) {
+            log({ status: e.status, body: e.body });
+          }
+        });
+
+        doctorEl.addEventListener("change", async () => {
+          try {
+            await loadSlots(doctorEl.value);
+            log("Openings updated.");
+          } catch (e) {
+            log({ status: e.status, body: e.body });
+          }
+        });
+
+        (async () => {
+          try {
+            window.ClinicNav.refresh();
+            await loadDoctors();
+            await applyDoctorFromUrl();
+            log("Ready.");
+          } catch (e) {
+            log({ status: e.status, body: e.body });
+          }
+        })();
+      })();
+    </script>
+  </body>
+</html>

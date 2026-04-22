@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Secrets & local env (keep .env.example tracked)
+.env
+.env.*
+!.env.example
+
+# SQLite & local data (default: ./data/… ; root patterns = alternate DATABASE_PATH)
+data/
+/*.db
+/*.sqlite*
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage & tool caches
+coverage/
+.nyc_output/
+.eslintcache
+
+# Playwright (when added)
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# JetBrains
+.idea/

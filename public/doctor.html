@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Doctor — Dashboard</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body data-qa="page-doctor-dashboard">
+    <header class="site-header" data-qa="site-header">
+      <div class="header-left">
+        <a class="brand" href="/" data-qa="site-brand">Clinic booking</a>
+      </div>
+      <nav class="user-nav" aria-label="Account" data-qa="site-user-nav">
+        <span id="navAuth" class="muted" style="margin: 0" data-qa="site-auth-label"></span>
+        <a href="/login" id="loginNav" data-qa="site-login">Sign in</a>
+        <button type="button" id="logoutBtn" class="secondary" style="display: none; margin-top: 0" data-qa="site-logout">
+          Sign out
+        </button>
+      </nav>
+    </header>
+
+    <nav class="doctor-subnav" aria-label="Doctor workspace" data-qa="doctor-nav">
+      <a href="/doctor" data-doctor-nav="dashboard" data-qa="doctor-nav-dashboard">Dashboard</a>
+      <a href="/doctor/appointments" data-doctor-nav="appointments" data-qa="doctor-nav-appointments">Appointments</a>
+      <a href="/doctor/schedule" data-doctor-nav="schedule" data-qa="doctor-nav-schedule">Schedule</a>
+      <a href="/doctor/account" data-doctor-nav="account" data-qa="doctor-nav-account">Account</a>
+    </nav>
+
+    <p id="registerHint" class="muted" style="margin: 0 0 1rem; display: none" data-qa="doctor-dashboard-register-hint">
+      New clinician?
+      <a href="/register/doctor">Create a doctor account</a> or
+      <a href="/register">see all sign-up options</a>.
+    </p>
+
+    <section data-qa="doctor-dashboard-main">
+      <h1 style="margin: 0 0 0.5rem; font-size: 1.1rem; font-weight: 600" data-qa="doctor-dashboard-title">Your clinician home</h1>
+      <p class="muted" style="margin-top: 0">
+        Incoming visit requests, your diary, and profile settings each have their own page — use the menu above.
+      </p>
+
+      <div id="statsBanner" class="banner-error" style="display: none; margin: 0.75rem 0" role="alert" data-qa="doctor-dashboard-stats-banner"></div>
+
+      <div id="statsPanel" class="stats-row" style="display: none" data-qa="doctor-dashboard-stats">
+        <div>
+          <span class="muted" style="margin: 0; font-size: 0.82rem">Waiting on you</span><br />
+          <strong id="statPending">0</strong>
+          <span class="muted" style="margin: 0; font-size: 0.82rem"> requests</span>
+        </div>
+        <div>
+          <span class="muted" style="margin: 0; font-size: 0.82rem">Slots today (your diary)</span><br />
+          <strong id="statSlotsToday">0</strong>
+        </div>
+      </div>
+
+      <div class="hub-grid" style="margin-top: 0.75rem" data-qa="doctor-dashboard-hubs">
+        <div class="hub-card" data-qa="doctor-dashboard-hub-appointments">
+          <h2 style="margin: 0 0 0.35rem; font-size: 1rem">Appointments</h2>
+          <p>Accept or turn down visit requests from patients.</p>
+          <a class="action" href="/doctor/appointments" data-qa="doctor-dashboard-link-appointments">Open appointments</a>
+        </div>
+        <div class="hub-card" data-qa="doctor-dashboard-hub-schedule">
+          <h2 style="margin: 0 0 0.35rem; font-size: 1rem">Schedule</h2>
+          <p>See what’s booked and what’s still free.</p>
+          <a class="action" href="/doctor/schedule" data-qa="doctor-dashboard-link-schedule">Open schedule</a>
+        </div>
+        <div class="hub-card" data-qa="doctor-dashboard-hub-account">
+          <h2 style="margin: 0 0 0.35rem; font-size: 1rem">Account</h2>
+          <p>How you appear in the clinic directory and how to leave this demo.</p>
+          <a class="action" href="/doctor/account" data-qa="doctor-dashboard-link-account">Open account</a>
+        </div>
+      </div>
+    </section>
+
+    <script src="/js/app-core.js"></script>
+    <script src="/js/app-nav.js"></script>
+    <script src="/js/doctor-shell.js"></script>
+    <script>
+      (function () {
+        if (!window.ClinicDoctorShell.guardDoctorWorkspace()) {
+          return;
+        }
+        window.ClinicDoctorShell.setActiveNav("dashboard");
+
+        const statsPanel = document.getElementById("statsPanel");
+        const statsBanner = document.getElementById("statsBanner");
+        const registerHint = document.getElementById("registerHint");
+
+        function utcDateString(iso) {
+          if (!iso || typeof iso !== "string") {
+            return "";
+          }
+          return iso.slice(0, 10);
+        }
+
+        async function loadStats() {
+          statsBanner.style.display = "none";
+          statsBanner.textContent = "";
+          statsPanel.style.display = "none";
+          registerHint.style.display = "none";
+          const u = window.ClinicApp.getUser();
+          const t = window.ClinicApp.getToken();
+          if (!t || !u || u.role !== "doctor") {
+            registerHint.style.display = "block";
+            return;
+          }
+          try {
+            const [appts, slots] = await Promise.all([
+              window.ClinicApp.api("/api/v1/appointments/doctor"),
+              window.ClinicApp.api("/api/v1/doctors/me/slots"),
+            ]);
+            const pending = Array.isArray(appts) ? appts.filter((a) => a.status === "pending").length : 0;
+            const today = new Date().toISOString().slice(0, 10);
+            const slotsToday = Array.isArray(slots)
+              ? slots.filter((s) => utcDateString(s.startTime) === today).length
+              : 0;
+            document.getElementById("statPending").textContent = String(pending);
+            document.getElementById("statSlotsToday").textContent = String(slotsToday);
+            statsPanel.style.display = "flex";
+          } catch (e) {
+            const msg =
+              e.body && typeof e.body === "object" && e.body.message
+                ? String(e.body.message)
+                : "We couldn’t load your snapshot. You can still open each section from the cards.";
+            statsBanner.textContent = msg;
+            statsBanner.style.display = "block";
+          }
+        }
+
+        window.ClinicNav.bindLogout(() => {
+          loadStats();
+        });
+
+        window.ClinicNav.refresh();
+        loadStats();
+      })();
+    </script>
+  </body>
+</html>

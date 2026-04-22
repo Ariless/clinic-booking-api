@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Patient — Account</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body data-qa="page-patient-account">
+    <header class="site-header" data-qa="site-header">
+      <div class="header-left">
+        <a class="brand" href="/" data-qa="site-brand">Clinic booking</a>
+      </div>
+      <nav class="user-nav" aria-label="Account" data-qa="site-user-nav">
+        <span id="navAuth" class="muted" style="margin: 0" data-qa="site-auth-label"></span>
+        <a href="/login" id="loginNav" data-qa="site-login">Sign in</a>
+        <button type="button" id="logoutBtn" class="secondary" style="display: none; margin-top: 0" data-qa="site-logout">
+          Sign out
+        </button>
+      </nav>
+    </header>
+
+    <nav class="patient-subnav" aria-label="Patient workspace" data-qa="patient-nav">
+      <a href="/patient" data-patient-nav="dashboard" data-qa="patient-nav-dashboard">Dashboard</a>
+      <a href="/patient/booking" data-patient-nav="booking" data-qa="patient-nav-booking">Booking</a>
+      <a href="/patient/schedule" data-patient-nav="schedule" data-qa="patient-nav-schedule">Schedule</a>
+      <a href="/patient/appointments" data-patient-nav="appointments" data-qa="patient-nav-appointments">Appointments</a>
+      <a href="/patient/account" data-patient-nav="account" data-qa="patient-nav-account">Account</a>
+    </nav>
+
+    <section data-qa="patient-account-section">
+      <h1 style="margin: 0 0 0.5rem; font-size: 1.05rem; font-weight: 600" data-qa="patient-account-title">Your profile</h1>
+      <p class="muted" style="margin-top: 0">
+        What we show here comes from your sign-in. Use <strong>Sign out</strong> on shared devices.
+      </p>
+      <div id="accountBanner" class="banner-error" style="display: none; margin-bottom: 0.75rem" role="alert" data-qa="patient-account-banner"></div>
+      <div id="accountBody" data-qa="patient-account-body"></div>
+    </section>
+
+    <details class="technical" data-qa="patient-account-tech-details">
+      <summary>Technical details (optional)</summary>
+      <pre id="accountRaw" style="margin-top: 0.5rem" data-qa="patient-account-tech-log">—</pre>
+    </details>
+
+    <script src="/js/app-core.js"></script>
+    <script src="/js/app-nav.js"></script>
+    <script src="/js/patient-shell.js"></script>
+    <script>
+      (function () {
+        if (!window.ClinicPatientShell.guardDoctorRedirect()) {
+          return;
+        }
+        window.ClinicPatientShell.setActiveNav("account");
+
+        const accountBody = document.getElementById("accountBody");
+        const accountRaw = document.getElementById("accountRaw");
+        const accountBanner = document.getElementById("accountBanner");
+
+        function escapeHtml(s) {
+          return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+        }
+
+        async function renderAccount() {
+          const prevScrollY = window.scrollY;
+          window.ClinicApp.blurActiveWithin(accountBody);
+          try {
+            accountBanner.style.display = "none";
+            accountBanner.textContent = "";
+            window.ClinicNav.refresh();
+            const u = window.ClinicApp.getUser();
+            if (!u) {
+              accountBody.innerHTML = `
+              <p class="muted" style="margin:0 0 0.75rem">You’re not signed in.</p>
+              <p style="margin:0 0 0.5rem"><a href="/login">Sign in</a> to see your profile here.</p>
+              <p style="margin:0 0 0.5rem"><a href="/register/patient">Create a patient account</a> if you’re new.</p>
+              <p style="margin:0"><a href="/register">All registration options</a></p>
+            `;
+              accountRaw.textContent = "null";
+              return;
+            }
+            if (u.role !== "patient") {
+              accountBody.innerHTML =
+                '<p class="muted">This area is for people using the clinic as patients. Your current role is <strong>' +
+                escapeHtml(u.role) +
+                "</strong>.</p>";
+              accountRaw.textContent = JSON.stringify(u, null, 2);
+              return;
+            }
+            try {
+              const data = await window.ClinicApp.api("/api/v1/auth/me");
+              const user = data.user;
+              accountBody.innerHTML = `
+              <dl class="dl-account">
+                <dt>Name</dt><dd>${escapeHtml(user.name || "—")}</dd>
+                <dt>Email</dt><dd>${escapeHtml(user.email)}</dd>
+                <dt>Clinic file number</dt><dd>${user.id}</dd>
+              </dl>
+              <p style="margin:0.85rem 0 0">
+                <a href="/patient/booking">Book a visit</a> · <a href="/patient/appointments">See your visits</a>
+              </p>
+              <div class="danger-zone" id="deleteZone" data-qa="patient-account-danger-zone">
+                <h2>Close this demo account</h2>
+                <p>You won’t be able to sign in again with this email in this environment. Past visits stay in the database for the demo.</p>
+                <button type="button" class="secondary" id="deleteAccountBtn" data-qa="patient-account-delete">Close my account</button>
+              </div>
+            `;
+              accountRaw.textContent = JSON.stringify(data, null, 2);
+              document.getElementById("deleteAccountBtn").addEventListener("click", async () => {
+                const ok = window.confirm(
+                  "Close this patient account for good? You will be signed out and will need a new registration to use this email again."
+                );
+                if (!ok) {
+                  return;
+                }
+                try {
+                  await window.ClinicApp.api("/api/v1/auth/me", { method: "DELETE" });
+                  window.ClinicApp.clearSession();
+                  window.location.assign("/");
+                } catch (err) {
+                  const msg =
+                    err.body && typeof err.body === "object" && err.body.message
+                      ? String(err.body.message)
+                      : "Could not close the account.";
+                  accountBanner.textContent = msg;
+                  accountBanner.style.display = "block";
+                }
+              });
+            } catch (e) {
+              accountBody.innerHTML =
+                '<p class="muted">We couldn’t refresh your profile from the server. What we know locally is still below.</p>' +
+                `<dl class="dl-account"><dt>Name</dt><dd>${escapeHtml(u.name || "—")}</dd><dt>Email</dt><dd>${escapeHtml(u.email)}</dd><dt>Clinic file number</dt><dd>${u.id}</dd></dl>`;
+              accountRaw.textContent = JSON.stringify({ local: u, error: String(e.message) }, null, 2);
+            }
+          } finally {
+            window.ClinicApp.restoreScrollY(prevScrollY);
+          }
+        }
+
+        window.ClinicNav.bindLogout(() => {
+          renderAccount();
+        });
+
+        renderAccount();
+      })();
+    </script>
+  </body>
+</html>

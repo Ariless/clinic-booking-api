@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create patient account</title>
+    <link rel="stylesheet" href="/css/app.css" />
+    <style>
+      body {
+        max-width: 22rem;
+        margin: 0 auto;
+        padding: 1.5rem 1.25rem;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1.35rem 1.2rem;
+      }
+      h1 {
+        margin: 0 0 0.35rem;
+        font-size: 1.15rem;
+      }
+      .subtitle {
+        margin: 0 0 1rem;
+        color: #64748b;
+        font-size: 0.88rem;
+      }
+      label {
+        display: block;
+        margin: 0.65rem 0 0.25rem;
+        font-size: 0.82rem;
+        color: #475569;
+      }
+      input {
+        width: 100%;
+        padding: 0.5rem 0.55rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 1rem;
+        box-sizing: border-box;
+      }
+      button[type="submit"] {
+        width: 100%;
+        margin-top: 1.1rem;
+        padding: 0.55rem 0.75rem;
+        border: none;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #fff;
+        font-weight: 600;
+        font-size: 0.95rem;
+        cursor: pointer;
+      }
+      button[type="submit"]:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
+      .error {
+        margin-top: 0.75rem;
+        padding: 0.5rem 0.6rem;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        color: #991b1b;
+        display: none;
+      }
+      .success {
+        margin-top: 0.75rem;
+        padding: 0.5rem 0.6rem;
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        color: #065f46;
+        display: none;
+      }
+      .footer {
+        margin-top: 1.1rem;
+        text-align: center;
+        font-size: 0.85rem;
+      }
+      .footer a {
+        color: #2563eb;
+      }
+    </style>
+  </head>
+  <body data-qa="page-register-patient">
+    <div class="card" data-qa="register-patient-card">
+      <h1 data-qa="register-patient-title">Create patient account</h1>
+      <p class="subtitle">You’ll be signed in automatically and taken to your patient home.</p>
+      <form id="form" novalidate data-qa="register-patient-form">
+        <label for="name">Full name</label>
+        <input id="name" name="name" type="text" autocomplete="name" required data-qa="register-patient-name" />
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required data-qa="register-patient-email" />
+        <label for="password">Password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autocomplete="new-password"
+          required
+          minlength="6"
+          data-qa="register-patient-password"
+        />
+        <p class="field-hint" style="margin-top: 0.35rem">At least 6 characters.</p>
+        <button type="submit" id="submit" data-qa="register-patient-submit">Create account</button>
+      </form>
+      <div id="error" class="error" role="alert" data-qa="register-patient-error"></div>
+      <div id="success" class="success" role="status" data-qa="register-patient-success"></div>
+      <div class="footer" data-qa="register-patient-footer">
+        <a href="/login" data-qa="register-patient-link-login">Sign in instead</a> ·
+        <a href="/register" data-qa="register-patient-link-types">Other account types</a> ·
+        <a href="/" data-qa="register-patient-link-home">Home</a>
+      </div>
+    </div>
+    <script src="/js/app-core.js"></script>
+    <script>
+      (function () {
+        const form = document.getElementById("form");
+        const errorEl = document.getElementById("error");
+        const successEl = document.getElementById("success");
+        const submitBtn = document.getElementById("submit");
+
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          errorEl.style.display = "none";
+          errorEl.textContent = "";
+          successEl.style.display = "none";
+          successEl.textContent = "";
+          const name = document.getElementById("name").value.trim();
+          const email = document.getElementById("email").value.trim();
+          const password = document.getElementById("password").value;
+          if (!name) {
+            errorEl.textContent = "Please enter your name.";
+            errorEl.style.display = "block";
+            return;
+          }
+          if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            errorEl.textContent = "Please enter a valid email.";
+            errorEl.style.display = "block";
+            return;
+          }
+          if (password.length < 6) {
+            errorEl.textContent = "Password must be at least 6 characters.";
+            errorEl.style.display = "block";
+            return;
+          }
+          submitBtn.disabled = true;
+          let registered = false;
+          try {
+            const res = await fetch("/api/v1/auth/register", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify({ name, email, password, role: "patient" }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              errorEl.textContent = body.message || "Registration failed.";
+              errorEl.style.display = "block";
+              return;
+            }
+            registered = true;
+            successEl.textContent = "Account created. Taking you to your workspace…";
+            successEl.style.display = "block";
+            window.ClinicApp.setSession(body.token, body.user, body.refreshToken);
+            window.setTimeout(() => {
+              window.location.assign(window.ClinicApp.resolveAfterLoginUrl(body.user, ""));
+            }, 500);
+          } catch {
+            errorEl.textContent = "Network error. Try again.";
+            errorEl.style.display = "block";
+          } finally {
+            if (!registered) {
+              submitBtn.disabled = false;
+            }
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

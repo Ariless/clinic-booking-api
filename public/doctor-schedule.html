@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Doctor — Schedule</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body data-qa="page-doctor-schedule">
+    <header class="site-header" data-qa="site-header">
+      <div class="header-left">
+        <a class="brand" href="/" data-qa="site-brand">Clinic booking</a>
+      </div>
+      <nav class="user-nav" aria-label="Account" data-qa="site-user-nav">
+        <span id="navAuth" class="muted" style="margin: 0" data-qa="site-auth-label"></span>
+        <a href="/login" id="loginNav" data-qa="site-login">Sign in</a>
+        <button type="button" id="logoutBtn" class="secondary" style="display: none; margin-top: 0" data-qa="site-logout">
+          Sign out
+        </button>
+      </nav>
+    </header>
+
+    <nav class="doctor-subnav" aria-label="Doctor workspace" data-qa="doctor-nav">
+      <a href="/doctor" data-doctor-nav="dashboard" data-qa="doctor-nav-dashboard">Dashboard</a>
+      <a href="/doctor/appointments" data-doctor-nav="appointments" data-qa="doctor-nav-appointments">Appointments</a>
+      <a href="/doctor/schedule" data-doctor-nav="schedule" data-qa="doctor-nav-schedule">Schedule</a>
+      <a href="/doctor/account" data-doctor-nav="account" data-qa="doctor-nav-account">Account</a>
+    </nav>
+
+    <p class="muted" style="margin: 0 0 1rem">
+      Your diary in one place: each block is one day (dates in your browser’s local time). Green means the patient can
+      still book that block; grey means someone is already scheduled. For open times, <strong>Remove opening</strong> asks for confirmation before deleting the row (only when no visit was ever tied to that slot).
+    </p>
+
+    <div id="pageBanner" class="banner-error" style="display: none; margin-bottom: 1rem" role="alert" data-qa="doctor-schedule-banner"></div>
+
+    <section id="createSlotSection" style="display: none" data-qa="doctor-schedule-create-section">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem">Add an opening</h2>
+      <p class="muted" style="margin-top: 0">
+        Patients only see slots that are still free. Times use your browser’s local date and time and are stored as
+        UTC on the server.
+      </p>
+      <p id="createSlotNoLink" class="empty-panel" style="display: none; margin-top: 0.5rem" data-qa="doctor-schedule-create-unlinked">
+        This sign-in isn’t linked to a row in the clinic directory, so openings can’t be created here. Use a doctor
+        account that was registered with a directory id.
+      </p>
+      <form id="createSlotForm" style="display: none; max-width: 22rem" data-qa="doctor-schedule-create-form">
+        <label for="slotDate">Date</label>
+        <input id="slotDate" name="slotDate" type="date" required data-qa="doctor-schedule-slot-date" />
+        <label for="slotStart" style="margin-top: 0.55rem">Start time</label>
+        <input id="slotStart" name="slotStart" type="time" required data-qa="doctor-schedule-slot-start" />
+        <label for="slotEnd" style="margin-top: 0.55rem">End time</label>
+        <input id="slotEnd" name="slotEnd" type="time" required data-qa="doctor-schedule-slot-end" />
+        <p id="createSlotMsg" class="form-msg" role="alert" data-qa="doctor-schedule-create-message"></p>
+        <div style="margin-top: 0.65rem">
+          <button type="submit" id="createSlotSubmit" data-qa="doctor-schedule-create-submit">Save opening</button>
+        </div>
+        <p id="createSlotSuccess" class="form-msg-success" role="status" data-qa="doctor-schedule-create-success"></p>
+      </form>
+    </section>
+
+    <section data-qa="doctor-schedule-diary-section">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="doctor-schedule-legend-title">Legend</h2>
+      <div class="schedule-legend">
+        <span><span class="legend-dot free"></span>Open for booking</span>
+        <span><span class="legend-dot busy"></span>Already booked</span>
+      </div>
+      <p id="scheduleListSuccess" class="form-msg-success" style="margin-top: 0.65rem" role="status" data-qa="doctor-schedule-list-success"></p>
+      <div id="scheduleEmpty" class="empty-panel" style="display: none; margin-top: 0.75rem" data-qa="doctor-schedule-empty">
+        No diary rows are on file yet.
+      </div>
+      <div id="scheduleMount" style="margin-top: 0.75rem" data-qa="doctor-schedule-mount"></div>
+    </section>
+
+    <details class="technical" data-qa="doctor-schedule-tech-details">
+      <summary>Technical details (optional)</summary>
+      <pre id="log" style="margin-top: 0.5rem" data-qa="doctor-schedule-tech-log">—</pre>
+    </details>
+
+    <script src="/js/app-core.js"></script>
+    <script src="/js/app-nav.js"></script>
+    <script src="/js/doctor-shell.js"></script>
+    <script>
+      (function () {
+        if (!window.ClinicDoctorShell.guardDoctorWorkspace()) {
+          return;
+        }
+        window.ClinicDoctorShell.setActiveNav("schedule");
+
+        const logEl = document.getElementById("log");
+        const scheduleMount = document.getElementById("scheduleMount");
+        const scheduleEmpty = document.getElementById("scheduleEmpty");
+        const pageBanner = document.getElementById("pageBanner");
+        const createSlotSection = document.getElementById("createSlotSection");
+        const createSlotNoLink = document.getElementById("createSlotNoLink");
+        const createSlotForm = document.getElementById("createSlotForm");
+        const createSlotMsg = document.getElementById("createSlotMsg");
+        const createSlotSuccess = document.getElementById("createSlotSuccess");
+        const scheduleListSuccess = document.getElementById("scheduleListSuccess");
+
+        function log(obj) {
+          logEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+        }
+
+        function localDayLabel(iso) {
+          try {
+            const d = new Date(iso);
+            return d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+          } catch {
+            return iso;
+          }
+        }
+
+        function dayKey(iso) {
+          if (!iso || typeof iso !== "string") {
+            return "unknown";
+          }
+          try {
+            const d = new Date(iso);
+            return d.toLocaleDateString();
+          } catch {
+            return iso.slice(0, 10);
+          }
+        }
+
+        function formatRange(isoStart, isoEnd) {
+          try {
+            const a = new Date(isoStart);
+            const b = new Date(isoEnd);
+            const t1 = a.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+            const t2 = b.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+            return `${t1} – ${t2}`;
+          } catch {
+            return `${isoStart} → ${isoEnd}`;
+          }
+        }
+
+        function pad2(n) {
+          return String(n).padStart(2, "0");
+        }
+
+        function defaultSlotDateParts() {
+          const now = new Date();
+          return {
+            date: `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`,
+            start: "09:00",
+            end: "09:30",
+          };
+        }
+
+        function applyCreateSlotDefaults() {
+          const d = defaultSlotDateParts();
+          document.getElementById("slotDate").value = d.date;
+          document.getElementById("slotStart").value = d.start;
+          document.getElementById("slotEnd").value = d.end;
+        }
+
+        function localInputsToISO(dateStr, timeStr) {
+          const t = timeStr.length === 5 ? `${timeStr}:00` : timeStr;
+          const d = new Date(`${dateStr}T${t}`);
+          if (Number.isNaN(d.getTime())) {
+            return null;
+          }
+          return d.toISOString();
+        }
+
+        function hideCreateSlotSuccess() {
+          createSlotSuccess.textContent = "";
+          createSlotSuccess.classList.remove("is-visible");
+        }
+
+        function hideScheduleListSuccess() {
+          scheduleListSuccess.textContent = "";
+          scheduleListSuccess.classList.remove("is-visible");
+        }
+
+        function showCreateSlotSuccess(text) {
+          hideScheduleListSuccess();
+          createSlotSuccess.textContent = text;
+          createSlotSuccess.classList.add("is-visible");
+        }
+
+        function showScheduleListSuccess(text) {
+          hideCreateSlotSuccess();
+          scheduleListSuccess.textContent = text;
+          scheduleListSuccess.classList.add("is-visible");
+        }
+
+        function syncCreateSlotSection() {
+          createSlotMsg.textContent = "";
+          const t = window.ClinicApp.getToken();
+          const user = window.ClinicApp.getUser();
+          if (!t || !user || user.role !== "doctor") {
+            createSlotSection.style.display = "none";
+            hideCreateSlotSuccess();
+            return;
+          }
+          createSlotSection.style.display = "block";
+          if (user.doctorRecordId == null) {
+            createSlotNoLink.style.display = "block";
+            createSlotForm.style.display = "none";
+            hideCreateSlotSuccess();
+            return;
+          }
+          createSlotNoLink.style.display = "none";
+          createSlotForm.style.display = "block";
+          if (!document.getElementById("slotDate").value) {
+            applyCreateSlotDefaults();
+          }
+        }
+
+        function renderSchedule(rows) {
+          scheduleMount.innerHTML = "";
+          if (!rows.length) {
+            scheduleEmpty.style.display = "block";
+            return;
+          }
+          scheduleEmpty.style.display = "none";
+          const groups = new Map();
+          for (const s of rows) {
+            const k = dayKey(s.startTime);
+            if (!groups.has(k)) {
+              groups.set(k, []);
+            }
+            groups.get(k).push(s);
+          }
+          const keys = Array.from(groups.keys());
+          keys.sort((a, b) => {
+            const da = new Date(groups.get(a)[0].startTime);
+            const db = new Date(groups.get(b)[0].startTime);
+            return da - db;
+          });
+          for (const k of keys) {
+            const list = groups.get(k);
+            list.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+            const h = document.createElement("h3");
+            h.className = "schedule-day";
+            h.textContent = localDayLabel(list[0].startTime);
+            scheduleMount.appendChild(h);
+            const ul = document.createElement("ul");
+            ul.style.margin = "0.35rem 0 0";
+            ul.style.paddingLeft = "1.2rem";
+            for (const s of list) {
+              const li = document.createElement("li");
+              const free = Boolean(s.isAvailable);
+              const dot = document.createElement("span");
+              dot.className = "legend-dot " + (free ? "free" : "busy");
+              dot.setAttribute("aria-hidden", "true");
+              li.appendChild(dot);
+              li.appendChild(
+                document.createTextNode(
+                  ` ${formatRange(s.startTime, s.endTime)} · slot ${s.id}${free ? " · open" : " · booked"}`
+                )
+              );
+              if (free) {
+                const rm = document.createElement("button");
+                rm.type = "button";
+                rm.className = "btn-inline secondary";
+                rm.style.marginLeft = "0.35rem";
+                rm.textContent = "Remove opening";
+                rm.dataset.slotRemove = String(s.id);
+                rm.setAttribute("data-qa", "doctor-schedule-remove-slot");
+                rm.title = "Only if no visit has ever been tied to this time";
+                li.appendChild(rm);
+              }
+              ul.appendChild(li);
+            }
+            scheduleMount.appendChild(ul);
+          }
+        }
+
+        async function loadSlots() {
+          const prevScrollY = window.scrollY;
+          pageBanner.style.display = "none";
+          pageBanner.textContent = "";
+          window.ClinicApp.blurActiveWithin(scheduleMount);
+          scheduleMount.innerHTML = "";
+          const t = window.ClinicApp.getToken();
+          const user = window.ClinicApp.getUser();
+          syncCreateSlotSection();
+          if (!t || !user || user.role !== "doctor") {
+            scheduleEmpty.textContent = "Sign in as a clinician to see your diary.";
+            scheduleEmpty.style.display = "block";
+            window.ClinicApp.restoreScrollY(prevScrollY);
+            return;
+          }
+          try {
+            const rows = await window.ClinicApp.api("/api/v1/doctors/me/slots");
+            renderSchedule(Array.isArray(rows) ? rows : []);
+            window.ClinicApp.restoreScrollY(prevScrollY);
+            log("Schedule ready.");
+          } catch (e) {
+            scheduleEmpty.style.display = "none";
+            hideCreateSlotSuccess();
+            hideScheduleListSuccess();
+            const msg =
+              e.status === 401
+                ? "Your session has expired. Please sign in again."
+                : e.body && typeof e.body === "object" && e.body.message
+                  ? String(e.body.message)
+                  : "We couldn’t load your diary.";
+            pageBanner.textContent = msg;
+            pageBanner.style.display = "block";
+            window.ClinicApp.restoreScrollY(prevScrollY);
+            log({ status: e.status, body: e.body });
+          }
+        }
+
+        window.ClinicNav.bindLogout(() => {
+          window.ClinicNav.refresh();
+          loadSlots().catch((e) => log({ status: e.status, body: e.body }));
+        });
+
+        scheduleMount.addEventListener("click", async (e) => {
+          const btn = e.target.closest("button[data-slot-remove]");
+          if (!btn || !scheduleMount.contains(btn)) {
+            return;
+          }
+          const slotId = btn.dataset.slotRemove;
+          const ok = window.confirm(
+            "Remove this opening from your diary permanently? You can only do this when no visit has ever been linked to this slot."
+          );
+          if (!ok) {
+            return;
+          }
+          pageBanner.style.display = "none";
+          pageBanner.textContent = "";
+          try {
+            await window.ClinicApp.api(`/api/v1/doctors/me/slots/${encodeURIComponent(slotId)}`, {
+              method: "DELETE",
+            });
+            showScheduleListSuccess("Opening removed from your diary.");
+            await loadSlots();
+            log("Slot removed.");
+          } catch (err) {
+            hideScheduleListSuccess();
+            const msg =
+              err.body && typeof err.body === "object" && err.body.message
+                ? String(err.body.message)
+                : "Could not remove this opening.";
+            pageBanner.textContent = msg;
+            pageBanner.style.display = "block";
+            log({ status: err.status, body: err.body });
+          }
+        });
+
+        document.getElementById("createSlotForm").addEventListener("submit", async (e) => {
+          e.preventDefault();
+          createSlotMsg.textContent = "";
+          hideCreateSlotSuccess();
+          hideScheduleListSuccess();
+          pageBanner.style.display = "none";
+          const user = window.ClinicApp.getUser();
+          if (!user || user.role !== "doctor" || user.doctorRecordId == null) {
+            return;
+          }
+          const dateStr = document.getElementById("slotDate").value;
+          const startT = document.getElementById("slotStart").value;
+          const endT = document.getElementById("slotEnd").value;
+          if (!dateStr || !startT || !endT) {
+            createSlotMsg.textContent = "Please fill in date, start, and end.";
+            return;
+          }
+          const startTime = localInputsToISO(dateStr, startT);
+          const endTime = localInputsToISO(dateStr, endT);
+          if (!startTime || !endTime) {
+            createSlotMsg.textContent = "Those date and time values are not valid.";
+            return;
+          }
+          if (new Date(endTime) <= new Date(startTime)) {
+            createSlotMsg.textContent = "End time must be after start time (same calendar day).";
+            return;
+          }
+          const submitBtn = document.getElementById("createSlotSubmit");
+          submitBtn.disabled = true;
+          try {
+            await window.ClinicApp.api("/api/v1/doctors/me/slots", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ startTime, endTime }),
+            });
+            showCreateSlotSuccess("Opening saved — it appears in your diary below.");
+            applyCreateSlotDefaults();
+            await loadSlots();
+            log("Slot created.");
+          } catch (err) {
+            const msg =
+              err.body && typeof err.body === "object" && err.body.message
+                ? String(err.body.message)
+                : "Could not save this opening.";
+            createSlotMsg.textContent = msg;
+            log({ status: err.status, body: err.body });
+          } finally {
+            submitBtn.disabled = false;
+          }
+        });
+
+        window.ClinicNav.refresh();
+        loadSlots().catch((e) => log({ status: e.status, body: e.body }));
+      })();
+    </script>
+  </body>
+</html>

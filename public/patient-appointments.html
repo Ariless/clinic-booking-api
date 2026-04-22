@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Patient — Appointments</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body data-qa="page-patient-appointments">
+    <header class="site-header" data-qa="site-header">
+      <div class="header-left">
+        <a class="brand" href="/" data-qa="site-brand">Clinic booking</a>
+      </div>
+      <nav class="user-nav" aria-label="Account" data-qa="site-user-nav">
+        <span id="navAuth" class="muted" style="margin: 0" data-qa="site-auth-label"></span>
+        <a href="/login" id="loginNav" data-qa="site-login">Sign in</a>
+        <button type="button" id="logoutBtn" class="secondary" style="display: none; margin-top: 0" data-qa="site-logout">
+          Sign out
+        </button>
+      </nav>
+    </header>
+
+    <nav class="patient-subnav" aria-label="Patient workspace" data-qa="patient-nav">
+      <a href="/patient" data-patient-nav="dashboard" data-qa="patient-nav-dashboard">Dashboard</a>
+      <a href="/patient/booking" data-patient-nav="booking" data-qa="patient-nav-booking">Booking</a>
+      <a href="/patient/schedule" data-patient-nav="schedule" data-qa="patient-nav-schedule">Schedule</a>
+      <a href="/patient/appointments" data-patient-nav="appointments" data-qa="patient-nav-appointments">Appointments</a>
+      <a href="/patient/account" data-patient-nav="account" data-qa="patient-nav-account">Account</a>
+    </nav>
+
+    <div id="noticeBanner" class="banner-error" style="display: none; margin-bottom: 1rem" role="alert" data-qa="patient-appt-banner"></div>
+
+    <div id="appointmentsGuestGate" class="empty-panel" style="display: none" data-qa="patient-appt-guest-gate">
+      <p style="margin: 0 0 0.5rem">
+        Saved visits are shown only when you <strong>sign in as a patient</strong>. As a guest you can still open
+        <a href="/patient/schedule">Schedule</a> or <a href="/patient/booking">Booking</a> to browse free times.
+      </p>
+      <p style="margin: 0">
+        <a id="loginForAppt" href="/login" data-qa="patient-appt-guest-login">Sign in</a> ·
+        <a href="/register/patient" data-qa="patient-appt-guest-register">Create patient account</a>
+      </p>
+    </div>
+
+    <section id="apptPatientSection" data-qa="patient-appt-section">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="patient-appt-title">Your visits</h2>
+      <label for="listPatientId">Clinic file number</label>
+      <input id="listPatientId" type="number" min="1" step="1" value="" inputmode="numeric" readonly data-qa="patient-appt-patient-id" />
+      <div class="toolbar" data-qa="patient-appt-toolbar">
+        <div>
+          <label for="filterStatus">Status</label>
+          <select id="filterStatus" data-qa="patient-appt-filter-status">
+            <option value="">All statuses</option>
+            <option value="pending">Waiting on clinic</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="rejected">Declined</option>
+          </select>
+        </div>
+        <div>
+          <label for="sortOrder">Sort</label>
+          <select id="sortOrder" data-qa="patient-appt-sort">
+            <option value="id-desc">Newest first</option>
+            <option value="id-asc">Oldest first</option>
+          </select>
+        </div>
+      </div>
+      <ul id="appointments" data-qa="patient-appt-list"></ul>
+    </section>
+
+    <details class="technical" data-qa="patient-appt-tech-details">
+      <summary>Technical details (optional)</summary>
+      <pre id="log" style="margin-top: 0.5rem" data-qa="patient-appt-tech-log">—</pre>
+    </details>
+
+    <script src="/js/app-core.js"></script>
+    <script src="/js/app-nav.js"></script>
+    <script src="/js/patient-shell.js"></script>
+    <script>
+      (function () {
+        if (!window.ClinicPatientShell.guardDoctorRedirect()) {
+          return;
+        }
+        window.ClinicPatientShell.setActiveNav("appointments");
+
+        const logEl = document.getElementById("log");
+        const appointmentsEl = document.getElementById("appointments");
+        const listPatientIdEl = document.getElementById("listPatientId");
+        const noticeBanner = document.getElementById("noticeBanner");
+        const appointmentsGuestGate = document.getElementById("appointmentsGuestGate");
+        const apptPatientSection = document.getElementById("apptPatientSection");
+        const loginForAppt = document.getElementById("loginForAppt");
+        const filterStatus = document.getElementById("filterStatus");
+        const sortOrder = document.getElementById("sortOrder");
+
+        let cachedRows = [];
+
+        function log(obj) {
+          logEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+        }
+
+        function hideNotice() {
+          noticeBanner.style.display = "none";
+          noticeBanner.textContent = "";
+        }
+
+        function showNotice(text) {
+          noticeBanner.textContent = text;
+          noticeBanner.style.display = "block";
+        }
+
+        function humanListError(err) {
+          const msg =
+            err.body && typeof err.body === "object" && err.body.message ? String(err.body.message) : "";
+          if (err.status === 401) {
+            return "Your session has expired or isn’t valid. Please sign in again.";
+          }
+          if (err.status === 403) {
+            return "You’re not allowed to view this list with the current account.";
+          }
+          if (err.status === 400) {
+            return msg || "Please check the patient file number and try again.";
+          }
+          if (msg) {
+            return msg;
+          }
+          return "We couldn’t load visits. Please try again.";
+        }
+
+        function statusLabel(status) {
+          if (status === "pending") {
+            return "Waiting on clinic";
+          }
+          if (status === "confirmed") {
+            return "Confirmed";
+          }
+          if (status === "cancelled") {
+            return "Cancelled";
+          }
+          if (status === "rejected") {
+            return "Declined";
+          }
+          return status;
+        }
+
+        function appointmentsLoginHref() {
+          return "/login?next=" + encodeURIComponent(window.location.pathname + (window.location.search || ""));
+        }
+
+        function applyListSessionUi() {
+          window.ClinicNav.refresh();
+          const user = window.ClinicApp.getUser();
+          const t = window.ClinicApp.getToken();
+          loginForAppt.href = appointmentsLoginHref();
+          if (user && user.role === "patient" && t) {
+            appointmentsGuestGate.style.display = "none";
+            apptPatientSection.style.display = "block";
+            listPatientIdEl.value = String(user.id);
+          } else {
+            appointmentsGuestGate.style.display = "block";
+            apptPatientSection.style.display = "none";
+          }
+        }
+
+        function filteredSortedRows() {
+          let rows = cachedRows.slice();
+          const f = filterStatus.value;
+          if (f) {
+            rows = rows.filter((r) => r.status === f);
+          }
+          const ord = sortOrder.value;
+          rows.sort((a, b) => (ord === "id-asc" ? a.id - b.id : b.id - a.id));
+          return rows;
+        }
+
+        function renderList() {
+          const prevScrollY = window.scrollY;
+          window.ClinicApp.blurActiveWithin(appointmentsEl);
+          appointmentsEl.innerHTML = "";
+          const user = window.ClinicApp.getUser();
+          const t = window.ClinicApp.getToken();
+          const rows = filteredSortedRows();
+          if (!rows.length) {
+            const li = document.createElement("li");
+            li.className = "muted";
+            li.style.listStyle = "none";
+            li.style.marginLeft = "-1rem";
+            li.textContent = cachedRows.length
+              ? "No visits match the filter you chose."
+              : "No visits to show yet.";
+            appointmentsEl.appendChild(li);
+            window.ClinicApp.restoreScrollY(prevScrollY);
+            return;
+          }
+          for (const a of rows) {
+            const li = document.createElement("li");
+            li.appendChild(
+              document.createTextNode(`Visit #${a.id} · time slot ${a.slotId} · ${statusLabel(a.status)}`)
+            );
+            if (t && user && user.role === "patient" && (a.status === "pending" || a.status === "confirmed")) {
+              const c = document.createElement("button");
+              c.type = "button";
+              c.className = "btn-inline secondary";
+              c.textContent = "Cancel visit";
+              c.dataset.apptAction = "cancel";
+              c.dataset.apptId = String(a.id);
+              c.setAttribute("data-qa", "patient-appt-cancel");
+              li.appendChild(c);
+            }
+            appointmentsEl.appendChild(li);
+          }
+          window.ClinicApp.restoreScrollY(prevScrollY);
+        }
+
+        async function loadAppointments() {
+          hideNotice();
+          cachedRows = [];
+          const user = window.ClinicApp.getUser();
+          const t = window.ClinicApp.getToken();
+          if (!t || !user || user.role !== "patient") {
+            renderList();
+            return;
+          }
+          const path = "/api/v1/appointments/my";
+          try {
+            const rows = await window.ClinicApp.api(path);
+            cachedRows = Array.isArray(rows) ? rows : [];
+            renderList();
+            log("List loaded.");
+          } catch (e) {
+            showNotice(humanListError(e));
+            log({ status: e.status, body: e.body });
+            renderList();
+          }
+        }
+
+        appointmentsEl.addEventListener("click", async (e) => {
+          const btn = e.target.closest("button[data-appt-action]");
+          if (!btn || !appointmentsEl.contains(btn)) {
+            return;
+          }
+          const id = btn.dataset.apptId;
+          const ok = window.confirm(
+            "Cancel this visit? The time may become available for someone else if the clinic allows it, and this action cannot be undone from here."
+          );
+          if (!ok) {
+            return;
+          }
+          try {
+            const updated = await window.ClinicApp.api(`/api/v1/appointments/${encodeURIComponent(id)}/cancel`, {
+              method: "PATCH",
+            });
+            log(updated);
+            hideNotice();
+            await loadAppointments();
+          } catch (err) {
+            showNotice(humanListError(err));
+            log({ status: err.status, body: err.body });
+          }
+        });
+
+        window.ClinicNav.bindLogout(() => {
+          hideNotice();
+          log("Signed out.");
+          applyListSessionUi();
+          loadAppointments().catch((e) => log({ status: e.status, body: e.body }));
+        });
+
+        filterStatus.addEventListener("change", () => {
+          renderList();
+        });
+        sortOrder.addEventListener("change", () => {
+          renderList();
+        });
+
+        (async () => {
+          try {
+            applyListSessionUi();
+            await loadAppointments();
+          } catch (e) {
+            showNotice(humanListError(e));
+            log({ status: e.status, body: e.body });
+          }
+        })();
+      })();
+    </script>
+  </body>
+</html>

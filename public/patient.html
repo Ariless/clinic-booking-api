@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Patient — Dashboard</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body data-qa="page-patient-dashboard">
+    <header class="site-header" data-qa="site-header">
+      <div class="header-left">
+        <a class="brand" href="/" data-qa="site-brand">Clinic booking</a>
+      </div>
+      <nav class="user-nav" aria-label="Account" data-qa="site-user-nav">
+        <span id="navAuth" class="muted" style="margin: 0" data-qa="site-auth-label"></span>
+        <a href="/login" id="loginNav" data-qa="site-login">Sign in</a>
+        <button type="button" id="logoutBtn" class="secondary" style="display: none; margin-top: 0" data-qa="site-logout">
+          Sign out
+        </button>
+      </nav>
+    </header>
+
+    <nav class="patient-subnav" aria-label="Patient workspace" data-qa="patient-nav">
+      <a href="/patient" data-patient-nav="dashboard" data-qa="patient-nav-dashboard">Dashboard</a>
+      <a href="/patient/booking" data-patient-nav="booking" data-qa="patient-nav-booking">Booking</a>
+      <a href="/patient/schedule" data-patient-nav="schedule" data-qa="patient-nav-schedule">Schedule</a>
+      <a href="/patient/appointments" data-patient-nav="appointments" data-qa="patient-nav-appointments">Appointments</a>
+      <a href="/patient/account" data-patient-nav="account" data-qa="patient-nav-account">Account</a>
+    </nav>
+
+    <p id="registerHint" class="muted" style="margin: 0 0 1rem; display: none" data-qa="patient-dashboard-register-hint">
+      New here?
+      <a href="/register/patient">Create a patient account</a> or
+      <a href="/register">see all sign-up options</a>.
+    </p>
+
+    <section data-qa="patient-dashboard-main">
+      <h1 style="margin: 0 0 0.5rem; font-size: 1.1rem; font-weight: 600" data-qa="patient-dashboard-title">Your patient home</h1>
+      <p class="muted" style="margin-top: 0">
+        Book visits, check open times, review your list, and manage your profile — each step has its own page in the menu
+        above.
+      </p>
+
+      <div id="dashboardSummary" style="margin: 1rem 0" data-qa="patient-dashboard-summary"></div>
+
+      <div class="hub-grid" style="margin-top: 0.75rem" data-qa="patient-dashboard-hubs">
+        <div class="hub-card" data-qa="patient-dashboard-hub-booking">
+          <h2 style="margin: 0 0 0.35rem; font-size: 1rem">Booking</h2>
+          <p>Choose a clinician and reserve a time.</p>
+          <a class="action" href="/patient/booking" data-qa="patient-dashboard-link-booking">Go to booking</a>
+        </div>
+        <div class="hub-card" data-qa="patient-dashboard-hub-schedule">
+          <h2 style="margin: 0 0 0.35rem; font-size: 1rem">Schedule</h2>
+          <p>See who still has openings before you book.</p>
+          <a class="action" href="/patient/schedule" data-qa="patient-dashboard-link-schedule">View schedule</a>
+        </div>
+        <div class="hub-card" data-qa="patient-dashboard-hub-appointments">
+          <h2 style="margin: 0 0 0.35rem; font-size: 1rem">Appointments</h2>
+          <p>Everything you’ve scheduled, and cancel when the clinic allows it.</p>
+          <a class="action" href="/patient/appointments" data-qa="patient-dashboard-link-appointments">View appointments</a>
+        </div>
+        <div class="hub-card" data-qa="patient-dashboard-hub-account">
+          <h2 style="margin: 0 0 0.35rem; font-size: 1rem">Account</h2>
+          <p>Your name and contact details from this session.</p>
+          <a class="action" href="/patient/account" data-qa="patient-dashboard-link-account">Open account</a>
+        </div>
+      </div>
+    </section>
+
+    <script src="/js/app-core.js"></script>
+    <script src="/js/app-nav.js"></script>
+    <script src="/js/patient-shell.js"></script>
+    <script>
+      (function () {
+        if (!window.ClinicPatientShell.guardDoctorRedirect()) {
+          return;
+        }
+        window.ClinicPatientShell.setActiveNav("dashboard");
+
+        const summaryEl = document.getElementById("dashboardSummary");
+        const registerHint = document.getElementById("registerHint");
+
+        function syncRegisterHint() {
+          const u = window.ClinicApp.getUser();
+          const t = window.ClinicApp.getToken();
+          registerHint.style.display = !t || !u || u.role !== "patient" ? "block" : "none";
+        }
+
+        function humanSummaryError(err) {
+          const msg =
+            err.body && typeof err.body === "object" && err.body.message ? String(err.body.message) : "";
+          if (err.status === 401) {
+            return "We couldn’t confirm your session. Please sign in again.";
+          }
+          if (err.status === 403) {
+            return "You don’t have access to this information with the current account.";
+          }
+          if (msg) {
+            return msg;
+          }
+          return "We couldn’t load your visits just now. Please try again in a moment.";
+        }
+
+        function guestNextSteps() {
+          return `
+            <div class="next-block">
+              <h2>What you can do next</h2>
+              <ul>
+                <li><a href="/login">Sign in</a> if you already use this clinic online.</li>
+                <li><a href="/register/patient">Create a patient account</a> so your bookings stay under your email.</li>
+                <li>Browse <a href="/patient/schedule">open times</a> and <a href="/patient/booking">pick a slot</a> — saving a visit requires <a href="/login">sign-in</a> or <a href="/register/patient">registration</a>.</li>
+              </ul>
+            </div>
+          `;
+        }
+
+        function patientNextSteps() {
+          return `
+            <div class="next-block">
+              <h2>What you can do next</h2>
+              <ul>
+                <li><a href="/patient/booking">Book a new visit</a> or check <a href="/patient/schedule">availability</a>.</li>
+                <li><a href="/patient/appointments">Review or cancel</a> upcoming visits when cancellation is allowed.</li>
+                <li><a href="/patient/account">Check your profile</a> on file for this session.</li>
+              </ul>
+            </div>
+          `;
+        }
+
+        async function loadDashboardSummary() {
+          syncRegisterHint();
+          const u = window.ClinicApp.getUser();
+          const t = window.ClinicApp.getToken();
+          if (!t || !u || u.role !== "patient") {
+            summaryEl.innerHTML = guestNextSteps();
+            return;
+          }
+          try {
+            const rows = await window.ClinicApp.api("/api/v1/appointments/my");
+            const total = rows.length;
+            const pending = rows.filter((r) => r.status === "pending").length;
+            const confirmed = rows.filter((r) => r.status === "confirmed").length;
+            const lines = rows
+              .slice(0, 5)
+              .map((r) => {
+                const st =
+                  r.status === "pending"
+                    ? "Waiting for the clinic"
+                    : r.status === "confirmed"
+                      ? "Confirmed"
+                      : r.status === "cancelled"
+                        ? "Cancelled"
+                        : r.status === "rejected"
+                          ? "Declined"
+                          : r.status;
+                return `<li>Visit #${r.id} · ${st}</li>`;
+              })
+              .join("");
+            summaryEl.innerHTML = `
+              <p style="margin:0 0 0.35rem">You have <strong>${total}</strong> visit(s) on file: <strong>${pending}</strong> waiting on the clinic, <strong>${confirmed}</strong> confirmed.</p>
+              <p class="muted" style="margin:0 0 0.35rem">Recent activity:</p>
+              <ul style="margin:0;padding-left:1.2rem">${lines || "<li>No visits yet.</li>"}</ul>
+              <p style="margin:0.65rem 0 0"><a href="/patient/appointments">See the full list</a></p>
+              ${patientNextSteps()}
+            `;
+          } catch (e) {
+            summaryEl.innerHTML = `
+              <p class="form-msg" style="margin:0">${humanSummaryError(e)}</p>
+              <p style="margin:0.75rem 0 0"><a href="/login">Sign in again</a></p>
+              ${guestNextSteps()}
+            `;
+          }
+        }
+
+        window.ClinicNav.bindLogout(() => {
+          loadDashboardSummary();
+          syncRegisterHint();
+        });
+
+        (function init() {
+          window.ClinicNav.refresh();
+          syncRegisterHint();
+          loadDashboardSummary();
+        })();
+      })();
+    </script>
+  </body>
+</html>

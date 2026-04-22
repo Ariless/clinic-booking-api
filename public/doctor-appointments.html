@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Doctor — Appointments</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body data-qa="page-doctor-appointments">
+    <header class="site-header" data-qa="site-header">
+      <div class="header-left">
+        <a class="brand" href="/" data-qa="site-brand">Clinic booking</a>
+      </div>
+      <nav class="user-nav" aria-label="Account" data-qa="site-user-nav">
+        <span id="navAuth" class="muted" style="margin: 0" data-qa="site-auth-label"></span>
+        <a href="/login" id="loginNav" data-qa="site-login">Sign in</a>
+        <button type="button" id="logoutBtn" class="secondary" style="display: none; margin-top: 0" data-qa="site-logout">
+          Sign out
+        </button>
+      </nav>
+    </header>
+
+    <nav class="doctor-subnav" aria-label="Doctor workspace" data-qa="doctor-nav">
+      <a href="/doctor" data-doctor-nav="dashboard" data-qa="doctor-nav-dashboard">Dashboard</a>
+      <a href="/doctor/appointments" data-doctor-nav="appointments" data-qa="doctor-nav-appointments">Appointments</a>
+      <a href="/doctor/schedule" data-doctor-nav="schedule" data-qa="doctor-nav-schedule">Schedule</a>
+      <a href="/doctor/account" data-doctor-nav="account" data-qa="doctor-nav-account">Account</a>
+    </nav>
+
+    <p class="muted" style="margin: 0 0 1rem">
+      Each row is a patient request tied to a time in your diary. Confirm when you can see them, or turn the request
+      down if it doesn’t work.
+    </p>
+
+    <div id="pageBanner" class="banner-error" style="display: none; margin-bottom: 1rem" role="alert" data-qa="doctor-appt-banner-error"></div>
+    <div id="bannerSuccess" class="banner-success" role="status" style="display: none; margin-bottom: 1rem" data-qa="doctor-appt-banner-success"></div>
+
+    <section data-qa="doctor-appt-section">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="doctor-appt-title">Incoming requests</h2>
+      <p class="muted">When you’re signed in as a clinician, this list shows visits linked to your profile.</p>
+      <div>
+        <button type="button" class="secondary" id="refreshList" data-qa="doctor-appt-refresh">Refresh</button>
+      </div>
+      <div id="listEmpty" class="empty-panel" style="display: none; margin-top: 0.75rem" data-qa="doctor-appt-empty">
+        Nothing is waiting right now. When patients book into your times, they’ll appear here.
+      </div>
+      <ul id="appointments" style="margin-top: 0.65rem" data-qa="doctor-appt-list"></ul>
+    </section>
+
+    <details class="technical" data-qa="doctor-appt-tech-details">
+      <summary>Technical details (optional)</summary>
+      <pre id="log" style="margin-top: 0.5rem" data-qa="doctor-appt-tech-log">—</pre>
+    </details>
+
+    <script src="/js/app-core.js"></script>
+    <script src="/js/app-nav.js"></script>
+    <script src="/js/doctor-shell.js"></script>
+    <script>
+      (function () {
+        if (!window.ClinicDoctorShell.guardDoctorWorkspace()) {
+          return;
+        }
+        window.ClinicDoctorShell.setActiveNav("appointments");
+
+        const logEl = document.getElementById("log");
+        const appointmentsEl = document.getElementById("appointments");
+        const listEmpty = document.getElementById("listEmpty");
+        const pageBanner = document.getElementById("pageBanner");
+        const bannerSuccess = document.getElementById("bannerSuccess");
+
+        function log(obj) {
+          logEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+        }
+
+        function hideBanners() {
+          pageBanner.style.display = "none";
+          pageBanner.textContent = "";
+          bannerSuccess.style.display = "none";
+          bannerSuccess.textContent = "";
+        }
+
+        function formatWhen(iso) {
+          if (!iso) {
+            return "Time not on file";
+          }
+          try {
+            return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+          } catch {
+            return String(iso);
+          }
+        }
+
+        function statusLabel(s) {
+          if (s === "pending") {
+            return "Needs your answer";
+          }
+          if (s === "confirmed") {
+            return "Confirmed";
+          }
+          if (s === "cancelled") {
+            return "Cancelled";
+          }
+          if (s === "rejected") {
+            return "Declined";
+          }
+          return s;
+        }
+
+        async function loadAppointments() {
+          const prevScrollY = window.scrollY;
+          hideBanners();
+          window.ClinicApp.blurActiveWithin(appointmentsEl);
+          appointmentsEl.innerHTML = "";
+          listEmpty.style.display = "none";
+          const t = window.ClinicApp.getToken();
+          const user = window.ClinicApp.getUser();
+          if (!t || !user || user.role !== "doctor") {
+            listEmpty.textContent = "Sign in with a clinician account to see your incoming requests.";
+            listEmpty.style.display = "block";
+            window.ClinicApp.restoreScrollY(prevScrollY);
+            return;
+          }
+          try {
+            const rows = await window.ClinicApp.api("/api/v1/appointments/doctor");
+            if (!rows.length) {
+              listEmpty.style.display = "block";
+              window.ClinicApp.restoreScrollY(prevScrollY);
+              return;
+            }
+            for (const a of rows) {
+              const li = document.createElement("li");
+              li.style.marginBottom = "0.65rem";
+              const when = formatWhen(a.slotStartTime);
+              const main = document.createElement("div");
+              main.textContent = `Patient file #${a.patientId} · ${when} · ${statusLabel(a.status)}`;
+              li.appendChild(main);
+              const sub = document.createElement("div");
+              sub.className = "muted";
+              sub.style.marginTop = "0.2rem";
+              sub.style.fontSize = "0.85rem";
+              sub.textContent = `Request reference ${a.id} · diary slot ${a.slotId}`;
+              li.appendChild(sub);
+              if (a.status === "pending") {
+                const wrap = document.createElement("div");
+                wrap.style.marginTop = "0.35rem";
+                const c = document.createElement("button");
+                c.type = "button";
+                c.className = "btn-inline";
+                c.textContent = "Confirm visit";
+                c.dataset.apptAction = "confirm";
+                c.dataset.apptId = String(a.id);
+                c.setAttribute("data-qa", "doctor-appt-confirm");
+                const r = document.createElement("button");
+                r.type = "button";
+                r.className = "btn-inline secondary";
+                r.textContent = "Turn down";
+                r.dataset.apptAction = "reject";
+                r.dataset.apptId = String(a.id);
+                r.setAttribute("data-qa", "doctor-appt-reject");
+                wrap.appendChild(c);
+                wrap.appendChild(r);
+                li.appendChild(wrap);
+              }
+              if (a.status === "confirmed") {
+                const wrap = document.createElement("div");
+                wrap.style.marginTop = "0.35rem";
+                const x = document.createElement("button");
+                x.type = "button";
+                x.className = "btn-inline secondary";
+                x.textContent = "Cancel visit";
+                x.dataset.apptAction = "cancel-as-doctor";
+                x.dataset.apptId = String(a.id);
+                x.setAttribute("data-qa", "doctor-appt-cancel");
+                wrap.appendChild(x);
+                li.appendChild(wrap);
+              }
+              appointmentsEl.appendChild(li);
+            }
+            window.ClinicApp.restoreScrollY(prevScrollY);
+            log("List ready.");
+          } catch (e) {
+            const msg =
+              e.status === 401
+                ? "Your session has expired. Please sign in again."
+                : e.body && typeof e.body === "object" && e.body.message
+                  ? String(e.body.message)
+                  : "We couldn’t load this list.";
+            pageBanner.textContent = msg;
+            pageBanner.style.display = "block";
+            window.ClinicApp.restoreScrollY(prevScrollY);
+            log({ status: e.status, body: e.body });
+          }
+        }
+
+        appointmentsEl.addEventListener("click", async (e) => {
+          const btn = e.target.closest("button[data-appt-action]");
+          if (!btn || !appointmentsEl.contains(btn)) {
+            return;
+          }
+          const action = btn.dataset.apptAction;
+          const id = btn.dataset.apptId;
+          if (action === "confirm") {
+            const ok = window.confirm(
+              "Confirm this visit for the patient? They will see it as confirmed and the time stays reserved."
+            );
+            if (!ok) {
+              return;
+            }
+          }
+          if (action === "reject") {
+            const ok = window.confirm(
+              "Turn down this visit request? The patient will see it as declined and the time may become free again."
+            );
+            if (!ok) {
+              return;
+            }
+          }
+          if (action === "cancel-as-doctor") {
+            const ok = window.confirm(
+              "Cancel this confirmed visit? The patient will see it as cancelled and the diary time will be freed."
+            );
+            if (!ok) {
+              return;
+            }
+          }
+          hideBanners();
+          try {
+            let updated;
+            if (action === "confirm") {
+              updated = await window.ClinicApp.api(`/api/v1/appointments/${encodeURIComponent(id)}/confirm`, {
+                method: "PATCH",
+              });
+            } else if (action === "reject") {
+              updated = await window.ClinicApp.api(`/api/v1/appointments/${encodeURIComponent(id)}/reject`, {
+                method: "PATCH",
+              });
+            } else if (action === "cancel-as-doctor") {
+              updated = await window.ClinicApp.api(
+                `/api/v1/appointments/${encodeURIComponent(id)}/cancel-as-doctor`,
+                { method: "PATCH" }
+              );
+            }
+            log(updated);
+            bannerSuccess.textContent =
+              action === "confirm"
+                ? "Visit confirmed for the patient."
+                : action === "cancel-as-doctor"
+                  ? "Visit was cancelled for the patient."
+                  : "Request was turned down.";
+            bannerSuccess.style.display = "block";
+            await loadAppointments();
+          } catch (err) {
+            const msg =
+              err.body && typeof err.body === "object" && err.body.message
+                ? String(err.body.message)
+                : "Something went wrong. Please try again.";
+            pageBanner.textContent = msg;
+            pageBanner.style.display = "block";
+            log({ status: err.status, body: err.body });
+          }
+        });
+
+        window.ClinicNav.bindLogout(() => {
+          hideBanners();
+          window.ClinicNav.refresh();
+          loadAppointments().catch((e) => log({ status: e.status, body: e.body }));
+        });
+
+        document.getElementById("refreshList").addEventListener("click", () => {
+          loadAppointments().catch((e) => log({ status: e.status, body: e.body }));
+        });
+
+        window.ClinicNav.refresh();
+        loadAppointments().catch((e) => log({ status: e.status, body: e.body }));
+      })();
+    </script>
+  </body>
+</html>
