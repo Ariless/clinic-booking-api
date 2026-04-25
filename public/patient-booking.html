@@ -38,6 +38,33 @@
 
     <div id="bannerError" class="banner-error" role="alert" data-qa="booking-banner-error"></div>
 
+    <section data-qa="booking-section-ai">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem">Not sure which specialty?</h2>
+      <label for="aiSymptoms">Describe your symptoms</label>
+      <textarea id="aiSymptoms" rows="2" placeholder="e.g. chest pain, shortness of breath…" data-qa="booking-ai-symptoms"></textarea>
+      <details style="margin-top: 0.25rem">
+        <summary class="field-hint" style="cursor: pointer; display: inline">Symptom examples</summary>
+        <table style="margin-top: 0.4rem; font-size: 0.8rem; border-collapse: collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding: 0.2rem 0.75rem 0.2rem 0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 500">Keywords</th>
+              <th style="text-align:left; padding: 0.2rem 0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 500">Specialist</th>
+            </tr>
+          </thead>
+          <tbody style="color: #64748b">
+            <tr><td style="padding: 0.15rem 0.75rem 0.15rem 0">chest, heart, cardio, pressure</td><td>Cardiologist</td></tr>
+            <tr><td style="padding: 0.15rem 0.75rem 0.15rem 0">skin, rash, dermat</td><td>Dermatologist</td></tr>
+            <tr><td style="padding: 0.15rem 0.75rem 0.15rem 0">headache, migraine, nerve, numb</td><td>Neurologist</td></tr>
+            <tr><td style="padding: 0.15rem 0.75rem 0.15rem 0">bone, joint, knee, back pain, ortho</td><td>Orthopedist</td></tr>
+            <tr><td style="padding: 0.15rem 0.75rem 0.15rem 0">child, kid, infant, pediatric</td><td>Pediatrician</td></tr>
+            <tr><td style="padding: 0.15rem 0.75rem 0.15rem 0">cold, flu, fever, checkup, general</td><td>General Practitioner</td></tr>
+          </tbody>
+        </table>
+      </details>
+      <button type="button" id="aiRecommendBtn" style="margin-top: 0.5rem" data-qa="booking-ai-submit">Find specialist</button>
+      <p id="aiResult" role="status" style="margin-top: 0.5rem; min-height: 1.25rem; font-size: 0.875rem" data-qa="booking-ai-result"></p>
+    </section>
+
     <section id="sectionDoctors" data-qa="booking-section-clinician">
       <h2 style="margin: 0 0 0.5rem; font-size: 1rem">Clinician</h2>
       <div id="doctorsEmpty" class="empty-panel" style="display: none" data-qa="booking-doctors-empty">
@@ -99,6 +126,11 @@
           <button type="button" id="book" data-qa="booking-submit">Request this visit</button>
         </div>
         <p id="bookSuccessMsg" class="form-msg-success" role="status" data-qa="booking-success-message"></p>
+        <div id="waitlistOffer" style="display: none; margin-top: 0.75rem; padding: 0.6rem 0.75rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px" data-qa="booking-waitlist-offer">
+          <p style="margin: 0 0 0.4rem; font-size: 0.875rem">Want an earlier slot? Join the waitlist — we'll book you automatically if one opens up.</p>
+          <button type="button" id="joinWaitlistBtn" class="secondary" style="margin: 0" data-qa="booking-waitlist-join">Join waitlist</button>
+          <p id="waitlistMsg" style="margin: 0.4rem 0 0; font-size: 0.875rem; min-height: 1.1rem" data-qa="booking-waitlist-message"></p>
+        </div>
         <p id="bookHint" class="muted" style="display: none; margin-top: 0.65rem"></p>
         <p class="muted" style="margin-top: 0.65rem">
           When it goes through, you’ll see it under <a href="/patient/appointments">Appointments</a>.
@@ -141,11 +173,17 @@
         const loginToBook = document.getElementById("loginToBook");
         const bannerError = document.getElementById("bannerError");
         const bookSuccessMsg = document.getElementById("bookSuccessMsg");
+        const waitlistOffer = document.getElementById("waitlistOffer");
+        const joinWaitlistBtn = document.getElementById("joinWaitlistBtn");
+        const waitlistMsg = document.getElementById("waitlistMsg");
         const doctorsEmpty = document.getElementById("doctorsEmpty");
         const doctorsWrap = document.getElementById("doctorsWrap");
         const slotsEmpty = document.getElementById("slotsEmpty");
         const scheduleDeepLinkPara = document.getElementById("scheduleDeepLinkPara");
         const scheduleDeepLink = document.getElementById("scheduleDeepLink");
+        const aiSymptomsEl = document.getElementById("aiSymptoms");
+        const aiRecommendBtn = document.getElementById("aiRecommendBtn");
+        const aiResultEl = document.getElementById("aiResult");
 
         function log(obj) {
           logEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
@@ -214,6 +252,9 @@
         function hideBookSuccess() {
           bookSuccessMsg.textContent = "";
           bookSuccessMsg.classList.remove("is-visible");
+          waitlistOffer.style.display = "none";
+          waitlistMsg.textContent = "";
+          joinWaitlistBtn.disabled = false;
         }
 
         function hideBanners() {
@@ -380,6 +421,86 @@
           return { slotId };
         }
 
+        aiRecommendBtn.addEventListener("click", async () => {
+          const symptoms = aiSymptomsEl.value.trim();
+          if (!symptoms) {
+            aiResultEl.textContent = "Please describe your symptoms first.";
+            aiResultEl.className = "form-msg";
+            return;
+          }
+          aiRecommendBtn.disabled = true;
+          aiResultEl.className = "muted";
+          aiResultEl.textContent = "Looking for the best match…";
+          try {
+            const result = await window.ClinicApp.api("/api/v1/ai/recommend-doctor", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ symptoms }),
+            });
+            const specialty = result.recommendedSpecialty;
+            specialtyEl.value = specialty;
+            refillDoctorSelectForSpecialty();
+            resetSlotPickers();
+            slotsEmpty.style.display = "none";
+            updateScheduleDeepLink();
+            await loadSlots(doctorEl.value);
+
+            let msg = `Recommended: ${specialty}.`;
+            if (slotsByDay.size > 0) {
+              const firstDay = [...slotsByDay.keys()].sort()[0];
+              const firstSlot = slotsByDay.get(firstDay)[0];
+              const doctorName = allDoctors.find((d) => String(d.id) === doctorEl.value)?.name || "";
+              slotDayEl.value = firstDay;
+              fillTimeOptionsForDay(firstDay);
+              slotTimeEl.value = String(firstSlot.id);
+              msg += ` Nearest slot: ${doctorName} — ${formatDayLabel(firstDay)}, ${formatTimeRange(firstSlot.startTime, firstSlot.endTime)}.`;
+            } else {
+              msg += " No open slots found for this specialty right now.";
+            }
+            aiResultEl.textContent = msg;
+            aiResultEl.className = "muted";
+          } catch (e) {
+            aiResultEl.className = "form-msg";
+            if (e.status === 429) {
+              aiResultEl.textContent = "Too many requests — please wait a moment and try again.";
+            } else if (e.status === 422) {
+              aiResultEl.textContent = "Couldn't match your symptoms to a specialty. Try describing them differently.";
+            } else {
+              aiResultEl.textContent = "Something went wrong. Please choose a specialty manually.";
+            }
+          } finally {
+            aiRecommendBtn.disabled = false;
+          }
+        });
+
+        joinWaitlistBtn.addEventListener("click", async () => {
+          const doctorId = Number(doctorEl.value);
+          if (!doctorId) {
+            waitlistMsg.textContent = "Please choose a clinician first.";
+            waitlistMsg.className = "form-msg";
+            return;
+          }
+          joinWaitlistBtn.disabled = true;
+          try {
+            await window.ClinicApp.api("/api/v1/appointments/waitlist", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ doctorId }),
+            });
+            const doctorName = allDoctors.find((d) => String(d.id) === String(doctorId))?.name || "this clinician";
+            waitlistMsg.textContent = `You're on the waitlist for ${doctorName}. We'll book you automatically if an earlier slot opens up.`;
+            waitlistMsg.className = "muted";
+          } catch (e) {
+            joinWaitlistBtn.disabled = false;
+            if (e.status === 409) {
+              waitlistMsg.textContent = "You're already on the waitlist for this clinician.";
+            } else {
+              waitlistMsg.textContent = "Couldn't join the waitlist. Please try again.";
+            }
+            waitlistMsg.className = "form-msg";
+          }
+        });
+
         window.ClinicNav.bindLogout(() => {
           hideBanners();
           log("Signed out.");
@@ -450,6 +571,9 @@
             });
             log(created);
             showBookSuccess("Visit request saved — check Appointments for status.");
+            waitlistOffer.style.display = "block";
+            waitlistMsg.textContent = "";
+            joinWaitlistBtn.disabled = false;
             slotTimeEl.value = "";
             await loadSlots(doctorEl.value);
           } catch (e) {

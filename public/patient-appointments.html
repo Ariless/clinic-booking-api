@@ -67,6 +67,12 @@
       <ul id="appointments" data-qa="patient-appt-list"></ul>
     </section>
 
+    <section id="waitlistSection" style="display: none; margin-top: 1.5rem" data-qa="patient-waitlist-section">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="patient-waitlist-title">Waitlist</h2>
+      <p class="muted" style="margin: 0 0 0.75rem">You'll be booked automatically if an earlier slot opens up with these clinicians.</p>
+      <ul id="waitlistItems" data-qa="patient-waitlist-list"></ul>
+    </section>
+
     <details class="technical" data-qa="patient-appt-tech-details">
       <summary>Technical details (optional)</summary>
       <pre id="log" style="margin-top: 0.5rem" data-qa="patient-appt-tech-log">—</pre>
@@ -93,6 +99,8 @@
         const sortOrder = document.getElementById("sortOrder");
 
         let cachedRows = [];
+        const waitlistSection = document.getElementById("waitlistSection");
+        const waitlistItemsEl = document.getElementById("waitlistItems");
 
         function log(obj) {
           logEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
@@ -272,10 +280,72 @@
           renderList();
         });
 
+        function renderWaitlist(rows) {
+          waitlistItemsEl.innerHTML = "";
+          if (!rows.length) {
+            const li = document.createElement("li");
+            li.className = "muted";
+            li.style.listStyle = "none";
+            li.style.marginLeft = "-1rem";
+            li.textContent = "You're not on any waitlist right now.";
+            waitlistItemsEl.appendChild(li);
+            return;
+          }
+          for (const w of rows) {
+            const li = document.createElement("li");
+            li.style.marginBottom = "0.4rem";
+            li.setAttribute("data-qa", "patient-waitlist-item");
+            const text = document.createElement("span");
+            text.textContent = `${w.doctorName} (${w.doctorSpecialty})`;
+            li.appendChild(text);
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "btn-inline secondary";
+            btn.textContent = "Leave";
+            btn.dataset.waitlistId = String(w.id);
+            btn.setAttribute("data-qa", "patient-waitlist-leave");
+            li.appendChild(btn);
+            waitlistItemsEl.appendChild(li);
+          }
+        }
+
+        async function loadWaitlist() {
+          const user = window.ClinicApp.getUser();
+          const t = window.ClinicApp.getToken();
+          if (!t || !user || user.role !== "patient") {
+            waitlistSection.style.display = "none";
+            return;
+          }
+          try {
+            const rows = await window.ClinicApp.api("/api/v1/appointments/waitlist/me");
+            waitlistSection.style.display = "block";
+            renderWaitlist(Array.isArray(rows) ? rows : []);
+          } catch {
+            waitlistSection.style.display = "none";
+          }
+        }
+
+        waitlistItemsEl.addEventListener("click", async (e) => {
+          const btn = e.target.closest("button[data-waitlist-id]");
+          if (!btn) return;
+          const ok = window.confirm("Leave the waitlist for this clinician?");
+          if (!ok) return;
+          try {
+            await window.ClinicApp.api(
+              `/api/v1/appointments/waitlist/${encodeURIComponent(btn.dataset.waitlistId)}`,
+              { method: "DELETE" }
+            );
+            await loadWaitlist();
+          } catch {
+            showNotice("Couldn't remove you from the waitlist. Please try again.");
+          }
+        });
+
         (async () => {
           try {
             applyListSessionUi();
             await loadAppointments();
+            await loadWaitlist();
           } catch (e) {
             showNotice(humanListError(e));
             log({ status: e.status, body: e.body });

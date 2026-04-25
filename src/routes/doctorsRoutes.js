@@ -1,6 +1,7 @@
 const express = require("express");
 const doctorsRepository = require("../repositories/doctorsRepository");
 const slotsRepository = require("../repositories/slotsRepository");
+const waitlistRepository = require("../repositories/waitlistRepository");
 const { requireAuth, requireRoles } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -8,6 +9,23 @@ const router = express.Router();
 router.get("/", (req, res) => {
   const doctors = doctorsRepository.getAll();
   res.status(200).json(doctors);
+});
+
+router.get("/me/waitlist", requireAuth, requireRoles("doctor"), (req, res, next) => {
+  const doctorRecordId = req.user.doctorRecordId;
+  if (doctorRecordId == null) {
+    const err = new Error("Doctor profile is not linked to this account");
+    err.status = 403;
+    err.errorCode = "FORBIDDEN";
+    next(err);
+    return;
+  }
+  try {
+    const rows = waitlistRepository.listWaitlistByDoctor(doctorRecordId);
+    res.status(200).json(rows);
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.get("/me/slots", requireAuth, requireRoles("doctor"), (req, res, next) => {

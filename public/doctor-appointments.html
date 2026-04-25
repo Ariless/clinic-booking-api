@@ -47,6 +47,12 @@
       <ul id="appointments" style="margin-top: 0.65rem" data-qa="doctor-appt-list"></ul>
     </section>
 
+    <section id="waitlistSection" style="display: none; margin-top: 1.5rem" data-qa="doctor-waitlist-section">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="doctor-waitlist-title">Waitlist</h2>
+      <p class="muted" style="margin: 0 0 0.75rem">Patients waiting for an earlier slot with you — they'll be booked automatically when one opens up.</p>
+      <ul id="waitlistItems" data-qa="doctor-waitlist-list"></ul>
+    </section>
+
     <details class="technical" data-qa="doctor-appt-tech-details">
       <summary>Technical details (optional)</summary>
       <pre id="log" style="margin-top: 0.5rem" data-qa="doctor-appt-tech-log">—</pre>
@@ -67,6 +73,8 @@
         const listEmpty = document.getElementById("listEmpty");
         const pageBanner = document.getElementById("pageBanner");
         const bannerSuccess = document.getElementById("bannerSuccess");
+        const waitlistSection = document.getElementById("waitlistSection");
+        const waitlistItemsEl = document.getElementById("waitlistItems");
 
         function log(obj) {
           logEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
@@ -270,8 +278,40 @@
           loadAppointments().catch((e) => log({ status: e.status, body: e.body }));
         });
 
+        async function loadWaitlist() {
+          const user = window.ClinicApp.getUser();
+          const t = window.ClinicApp.getToken();
+          if (!t || !user || user.role !== "doctor") {
+            waitlistSection.style.display = "none";
+            return;
+          }
+          try {
+            const rows = await window.ClinicApp.api("/api/v1/doctors/me/waitlist");
+            waitlistSection.style.display = "block";
+            waitlistItemsEl.innerHTML = "";
+            if (!rows.length) {
+              const li = document.createElement("li");
+              li.className = "muted";
+              li.style.listStyle = "none";
+              li.style.marginLeft = "-1rem";
+              li.textContent = "No patients are waiting right now.";
+              waitlistItemsEl.appendChild(li);
+              return;
+            }
+            for (const w of rows) {
+              const li = document.createElement("li");
+              li.setAttribute("data-qa", "doctor-waitlist-item");
+              li.textContent = `${w.patientName} · waiting since ${new Date(w.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}`;
+              waitlistItemsEl.appendChild(li);
+            }
+          } catch {
+            waitlistSection.style.display = "none";
+          }
+        }
+
         window.ClinicNav.refresh();
         loadAppointments().catch((e) => log({ status: e.status, body: e.body }));
+        loadWaitlist().catch(() => {});
       })();
     </script>
   </body>

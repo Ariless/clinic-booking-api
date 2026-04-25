@@ -150,7 +150,11 @@
               const li = document.createElement("li");
               li.setAttribute("data-qa", "patient-schedule-slot");
               li.dataset.slotId = String(s.id);
-              li.textContent = `${s.id} — ${s.startTime} → ${s.endTime}`;
+              const start = new Date(s.startTime);
+              const end = new Date(s.endTime);
+              const dateStr = start.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+              const timeOpt = { hour: "2-digit", minute: "2-digit" };
+              li.textContent = `${dateStr} · ${start.toLocaleTimeString(undefined, timeOpt)} – ${end.toLocaleTimeString(undefined, timeOpt)}`;
               slotsEl.appendChild(li);
             }
             window.ClinicApp.restoreScrollY(prevScrollY);

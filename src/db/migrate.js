@@ -45,17 +45,23 @@ function migrate() {
 function ensureSlotWaitlistTable() {
   const t = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'slot_waitlist'").get();
   if (t) {
-    return;
+    const cols = db.prepare("PRAGMA table_info(slot_waitlist)").all();
+    if (cols.some((c) => c.name === "slotId")) {
+      // old per-slot schema → drop and recreate as per-doctor
+      db.exec("DROP TABLE slot_waitlist");
+    } else {
+      return;
+    }
   }
   db.exec(`
     CREATE TABLE slot_waitlist (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      slotId INTEGER NOT NULL,
+      doctorId INTEGER NOT NULL,
       patientId INTEGER NOT NULL,
       createdAt TEXT NOT NULL,
-      UNIQUE(slotId, patientId)
+      UNIQUE(doctorId, patientId)
     );
-    CREATE INDEX idx_slot_waitlist_slot ON slot_waitlist(slotId);
+    CREATE INDEX idx_slot_waitlist_doctor ON slot_waitlist(doctorId);
     CREATE INDEX idx_slot_waitlist_patient ON slot_waitlist(patientId);
   `);
 }

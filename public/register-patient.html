@@ -84,6 +84,11 @@
       .footer a {
         color: #2563eb;
       }
+      abbr[title="required"] {
+        color: #ef4444;
+        text-decoration: none;
+        margin-left: 0.2rem;
+      }
     </style>
   </head>
   <body data-qa="page-register-patient">
@@ -91,11 +96,11 @@
       <h1 data-qa="register-patient-title">Create patient account</h1>
       <p class="subtitle">You’ll be signed in automatically and taken to your patient home.</p>
       <form id="form" novalidate data-qa="register-patient-form">
-        <label for="name">Full name</label>
+        <label for="name">Full name <abbr title="required">*</abbr></label>
         <input id="name" name="name" type="text" autocomplete="name" required data-qa="register-patient-name" />
-        <label for="email">Email</label>
+        <label for="email">Email <abbr title="required">*</abbr></label>
         <input id="email" name="email" type="email" autocomplete="email" required data-qa="register-patient-email" />
-        <label for="password">Password</label>
+        <label for="password">Password <abbr title="required">*</abbr></label>
         <input
           id="password"
           name="password"

@@ -43,20 +43,20 @@ router.get("/doctor", requireAuth, requireRoles("doctor"), (req, res, next) => {
 });
 
 router.post("/waitlist", requireAuth, requireRoles("patient"), (req, res, next) => {
-  const { slotId } = req.body ?? {};
-  if (!isPositiveInteger(slotId)) {
-    const err = new Error("slotId must be a positive integer");
+  const { doctorId } = req.body ?? {};
+  if (!isPositiveInteger(doctorId)) {
+    const err = new Error("doctorId must be a positive integer");
     err.status = 400;
     err.errorCode = "VALIDATION_ERROR";
     next(err);
     return;
   }
   try {
-    const row = waitlistRepository.joinWaitlist({ slotId, patientId: req.user.id });
+    const row = waitlistRepository.joinWaitlist({ doctorId, patientId: req.user.id });
     metrics.inc("waitlist_joined_total");
     req.log.info(
-      { event: "waitlist.joined", waitlistId: row.id, slotId, patientId: req.user.id },
-      "patient joined slot waitlist"
+      { event: "waitlist.joined", waitlistId: row.id, doctorId, patientId: req.user.id },
+      "patient joined doctor waitlist"
     );
     res.status(201).json(row);
   } catch (e) {

@@ -1,4 +1,24 @@
 const db = require("../db/connection");
+const { getNextWaitlistEntry, deleteWaitlistEntryById } = require("./waitlistRepository");
+
+/**
+ * Must be called inside an existing db.transaction() — promotes the oldest
+ * waitlist entry to a new pending appointment and marks the slot unavailable again.
+ * No-op if the waitlist is empty for this slot.
+ */
+function promoteFromWaitlist(slotId, now) {
+  const slot = db.prepare("SELECT doctorId FROM slots WHERE id = ?").get(slotId);
+  if (!slot) return;
+  const entry = getNextWaitlistEntry(slot.doctorId);
+  if (!entry) return;
+  db
+    .prepare(
+      "INSERT INTO appointments (slotId, patientId, status, createdAt, updatedAt, deletedAt) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .run(slotId, entry.patientId, "pending", now, now, null);
+  db.prepare("UPDATE slots SET isAvailable = 0 WHERE id = ?").run(slotId);
+  deleteWaitlistEntryById(entry.id);
+}
 
 function bookSlot({ slotId, patientId }) {
   const run = db.transaction((sid, pid) => {
@@ -106,6 +126,7 @@ function cancelAppointmentByDoctor({ appointmentId, doctorRecordId }) {
     const now = new Date().toISOString();
     db.prepare("UPDATE appointments SET status = ?, updatedAt = ? WHERE id = ?").run("cancelled", now, aid);
     db.prepare("UPDATE slots SET isAvailable = 1 WHERE id = ?").run(row.slotId);
+    promoteFromWaitlist(row.slotId, now);
     return db.prepare("SELECT * FROM appointments WHERE id = ?").get(aid);
   });
   return run(appointmentId, doctorRecordId);
@@ -142,6 +163,7 @@ function cancelAppointmentByPatient({ appointmentId, patientId }) {
     const now = new Date().toISOString();
     db.prepare("UPDATE appointments SET status = ?, updatedAt = ? WHERE id = ?").run("cancelled", now, aid);
     db.prepare("UPDATE slots SET isAvailable = 1 WHERE id = ?").run(appointment.slotId);
+    promoteFromWaitlist(appointment.slotId, now);
     return db.prepare("SELECT * FROM appointments WHERE id = ?").get(aid);
   });
   return run(appointmentId, patientId);
@@ -213,6 +235,7 @@ function rejectAppointmentByDoctor({ appointmentId, doctorRecordId }) {
     const now = new Date().toISOString();
     db.prepare("UPDATE appointments SET status = ?, updatedAt = ? WHERE id = ?").run("rejected", now, aid);
     db.prepare("UPDATE slots SET isAvailable = 1 WHERE id = ?").run(row.slotId);
+    promoteFromWaitlist(row.slotId, now);
     return db.prepare("SELECT * FROM appointments WHERE id = ?").get(aid);
   });
   return run(appointmentId, doctorRecordId);
@@ -234,6 +257,7 @@ function expireStalePendingAppointments(maxAgeMs) {
     for (const row of rows) {
       db.prepare("UPDATE appointments SET status = 'cancelled', updatedAt = ? WHERE id = ?").run(now, row.id);
       db.prepare("UPDATE slots SET isAvailable = 1 WHERE id = ?").run(row.slotId);
+      promoteFromWaitlist(row.slotId, now);
       count += 1;
     }
     return count;
