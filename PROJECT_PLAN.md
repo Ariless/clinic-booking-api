@@ -19,6 +19,49 @@ Current checkpoint:
 - Step 1 completed: new project folder initialized.
 - Step 2 completed: base dependencies, scripts, `.env` / `.env.example`.
 - **Docs (2026-04-21):** `API_ENDPOINTS.md`, `DEFENSE_NOTES.md`, `CONTRACT_PACK.md` synced with API; **`PROJECT_PLAN.md`** + **`DEFENSE_NOTES.md`** second pass — AI path (`aiRecommendation.js`), auth refresh, doctor cancel, DB booking guard, slot rules, iteration checklists, “next slices” vs shipped features.
+- **Companion Playwright repo (`clinic-booking-api-tests`):** agreed **risk-first API test strategy** and J1/J3 split — see section **External companion: Playwright API tests** below (fixed 2026-04-21; implementation in the test repo may trail this doc until picked up).
+
+---
+
+## External companion: Playwright API tests (`clinic-booking-api-tests`)
+
+**Goal:** portfolio + interview — tests are a **map of risks and invariants**, not “coverage percentage”.
+
+### Principles
+- **One file ≈ one thesis** (one class of user/business harm if it regresses).
+- **`@smoke`** only on a **narrow** slice (e.g. login, one critical path fragment, RBAC boundary, catalog).
+- Avoid **two tests turning red for one broken transition** unless they assert **different invariants**; prefer a clear split of responsibility (J1 vs J3).
+
+### Target decomposition: J1 vs J3 (removes duplicate “confirm story”)
+
+| Piece | Responsibility | Interview line |
+| --- | --- | --- |
+| **J1** (`appointments.mini.j1.*`) | **User intent:** slot → book → **pending** visible in `GET /api/v1/appointments/my`. **Stops before** doctor confirm. | “I isolate the patient-visible commitment before the doctor acts.” |
+| **J3** (`appointments.confirm.j3.*`) | **System transition:** doctor **confirm** → `confirmed` in `/my` + **slot invariants** (e.g. slot absent from public `GET /api/v1/doctors/:id/slots` per contract). | “Confirm is a state transition + diary/catalog invariants, not the same test as ‘I booked’.” |
+| **J2** (`appointments.reject.j2.*`) | **Alternative branch:** reject + slot **returns** to bookable state. | “Reject is a first-class branch, not a failed confirm.” |
+| **RBAC** (`appointments.rbac.doctor.*`) | Patient JWT must **not** read doctor’s list (`403` / `FORBIDDEN`). | “Cross-role data boundary — privacy/compliance class risk; stays in smoke.” |
+
+**Note:** Companion **`clinic-booking-api-tests`** implements the split above (`appointments.mini.j1` → **pending** only in smoke; **`appointments.confirm.j3`** owns confirm + slot invariants under **`@api`**).
+
+### Must-add API tests (next implementation batch in `clinic-booking-api-tests`)
+
+1. ~~**`appointments.booking.conflict`**~~ **Done** in companion: `appointments.booking.conflict.test.js` (`@api`) — patient A books (`201`), patient B `POST /appointments` same **`slotId`** → **`409`**, **`errorCode`** `SLOT_TAKEN` (fixture **`user`** + **`seedPatient`**).
+2. **`appointments.cancel.patient`:** `PATCH /api/v1/appointments/:id/cancel` as patient from **pending** (and optionally **confirmed** per policy) → cancelled + **slot availability** story matches `API_ENDPOINTS.md` / repository behaviour.
+
+### Second wave (optional)
+
+- **422 / `INVALID_TRANSITION`:** one or two cases (e.g. confirm twice) — contract guard, not a long catalog.
+- **`POST /auth/refresh`:** when the “long session” product story matters for the portfolio.
+
+### Interview spine (short script, ~45–60s)
+
+Use **lifecycle + risk zones**: state machine (J1 → J3), alternative branch (J2), **access boundary** (RBAC), **contention** (409 double book), **lifecycle completion** (cancel). If a test fails, name the **business harm** (money/conflict, data leak, inconsistent diary, broken user journey) — not “assertion 7 failed”.
+
+### File naming (companion repo convention)
+
+`{domain}.{feature}[.qualifier].test.js` — examples: `auth.login`, `auth.register`, `doctors.list`, `appointments.mini.j1`, `appointments.reject.j2`, `appointments.confirm.j3`, `appointments.rbac.doctor`, `appointments.booking.conflict`; planned add: `appointments.cancel.patient`.
+
+**Where the full write-up lives (companion repo):** `clinic-booking-api-tests` → **`docs/TEST_STRATEGY.md`** (scope, tags, J1/J2/J3, planned files) and **`docs/RISK_ANALYSIS.md`** (impact × likelihood → tests). **UI + e2e minimal backlog (no duplicate browser J1):** same repo **`E2E_TEST_PLAN.md` → §9**; checklist also in **`TODO.md`** here.
 
 ---
 
@@ -37,11 +80,11 @@ Designed to be testable by design: clean architecture, Swagger docs, and operati
 - **Swagger / OpenAPI** — API documentation
 - **AI (current)** — rule-based specialty + doctor matching in **`src/services/aiRecommendation.js`** (wired by `POST /api/v1/ai/recommend-doctor`)
 - **AI (planned)** — external provider (e.g. Anthropic) behind a feature flag; not wired in this repo yet
-- **Playwright** — API + E2E flows (planned)
-- **AJV** — schema validation in tests (planned; not in this codebase yet)
+- **Playwright** — **not bundled in this repo**; the companion **`clinic-booking-api-tests`** repo runs **API (and future UI/e2e) Playwright** against this SUT (or a fork URL) with **GitHub Actions** — see **External companion: Playwright API tests** below and that repo’s `README.md` / `docs/TEST_STRATEGY.md`.
+- **AJV** — schema validation in **companion** tests (optional; planned expansion in `clinic-booking-api-tests`; not a runtime dependency of this service)
 - **pino** — structured logging (`src/logger.js`, `src/middlewares/http-logger.js`, domain `event` fields in routes)
 - **express-rate-limit** — AI recommendation throttle
-- **Grafana + Loki** (planned, not in repo yet) — when **Playwright** and API-level tests are added, the idea is to ship the same **JSON log lines** into **Loki** and explore them in **Grafana** (time range, `level`, `requestId`, `event`) as part of the learning / portfolio story for “tests + observability”. No Compose / Promtail wiring until that track starts; rationale also in **`quality-strategy.md`** → *Logging* (planned subsection).
+- **Grafana + Loki** (planned, not in repo yet) — pipe **Pino** JSON from **runs** (local or CI that starts this SUT) into **Loki** / **Grafana** for “tests + observability”; companion Playwright runs already produce logs here — ingestion wiring still deferred; rationale in **`quality-strategy.md`** → *Logging* (planned subsection).
 
 ---
 
@@ -192,25 +235,18 @@ Allowed specialties:
 
 ## Operational Modes
 
-`API_MODE=normal|buggy|chaos`
-
-Additionally, buggy behavior can be toggled by fine-grained flags (for targeted testing):
-- `BUG_DOUBLE_BOOKING`
-- `BUG_SKIP_TRANSITION_VALIDATION`
-- `BUG_PATIENT_DATA_LEAK`
-- `BUG_WRONG_STATUS_CODES`
-
-### normal
+### normal (main branch)
 - All rules enforced
 
-### buggy
-- Intentional defects enabled (preset + optional selective flags)
+### buggy (git branch `buggy`)
+- 6 intentional defects across easy / medium / hard tiers — see `BUGS.md`
+- Use: `git checkout buggy && npm run db:seed && npm run dev`
+- Companion test suite should produce 6 failures, all other tests green
 
-### chaos
+### chaos (planned)
 - Random 500 errors (configurable probability)
-- Random latency injection (500–3000ms)
-- Optional empty 200 response case
-- Deterministic seed support for tests (`CHAOS_SEED`)
+- Random latency injection
+- Validates test suite resilience to flakiness and retry logic
 
 ---
 
@@ -332,6 +368,9 @@ Error format:
 ```
 
 ### Must-have Test Cases (Iteration 1 baseline)
+
+**Where automated:** many rows below are covered or planned in companion **`clinic-booking-api-tests`** (`docs/RISK_ANALYSIS.md`, `TODO.md`); **double-book `409`** is covered by **`appointments.booking.conflict`**; remaining gap example: **patient cancel** — backlog there — this numbered list stays the **SUT contract checklist**, not “only manual”.
+
 1. Patient books available slot -> `201`, status `PENDING`
 2. Patient tries to book the same slot again -> `409`
 3. Doctor confirms own `PENDING` appointment -> `200`
@@ -360,14 +399,14 @@ Error format:
 - [x] Transaction-safe booking
 - [x] Swagger / OpenAPI (`/api/docs`, `openapi/openapi.yaml`)
 - [x] Unified error format + `requestId` + **`X-Request-Id`** header
-- [ ] Basic unit + integration + API tests (deferred — `npm run lint` only for now)
+- [ ] Basic **unit + integration** tests **in this repo** (deferred — `npm run lint` only for now). **Playwright API suite + CI** live in companion **`clinic-booking-api-tests`** (not counted as “missing” for this checkbox).
 - [x] AI recommendation endpoint — **rule-based** implementation (`aiRecommendation.js`); external AI + test mocks still planned
 - [x] Normal mode only (no buggy/chaos modes)
 
 ### Iteration 2 — QA Modes + Full Test Coverage
 - [ ] Buggy mode (preset + optional per-bug flags)
 - [ ] Chaos mode (probability config + latency + optional empty body)
-- [ ] Full API/E2E suites
+- [ ] Full API/E2E breadth in **companion** test repo (expand beyond current API files; UI/e2e per `E2E_TEST_PLAN.md` §9); optional extra modes here remain future work
 - [ ] Mode-aware suites (normal green, buggy demo suite isolated)
 - [ ] Chaos deterministic testing with `CHAOS_SEED`
 
@@ -412,7 +451,7 @@ Error format:
 
 ### Logging & test observability (planned)
 
-- [ ] **Loki + Grafana** alongside the future **Playwright / API** automation: collect **Pino** stdout (or file) during test runs, practice LogQL / Explore, dashboards, and “logs vs `GET /metrics`” — implementation deferred until the test framework exists; see **`quality-strategy.md`** for the short agreed note.
+- [ ] **Loki + Grafana**: collect **Pino** stdout (or file) from **runs that exercise this SUT** (including companion Playwright CI), practice LogQL / Explore, dashboards, and “logs vs `GET /metrics`” — **ingestion wiring** deferred; see **`quality-strategy.md`** for the short agreed note.
 
 ### AI Experiments
 
@@ -507,5 +546,5 @@ Each iteration closes only when:
 - Data isolation is enforced in:
   - `GET /appointments` / `GET /appointments/my`
   - `GET /appointments/doctor`
-- Must-have baseline tests (12+ cases) — **still open** (no automated runner wired)
+- **Playwright baseline + CI** — **in companion repo** `clinic-booking-api-tests` (smoke gate + full `npm test` workflow). Optional: **12+ unit tests colocated in this SUT repo** — separate goal if you want pytest/node unit coverage beside Playwright.
 - Swagger / OpenAPI covers MVP endpoints and major error responses (hand-maintained; drift possible)

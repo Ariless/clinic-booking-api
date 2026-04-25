@@ -6,7 +6,7 @@ Base: `http://localhost:3000` (see `PORT` in `.env`). Versioned API: **`/api/v1`
 
 **Auth:** `POST …/auth/register` and `POST …/auth/login` return **`{ token, refreshToken, user }`**. **`POST …/auth/refresh`** accepts **`{ refreshToken }`** and returns a new pair. Protected routes: header **`Authorization: Bearer <token>`** (access JWT only; refresh tokens are rejected here).
 
-**Demo seed:** `npm run db:seed` — passwords **`password`** for seeded users; **`doctor@example.com`** is linked to the first doctor row (`doctorRecordId`). Two patient accounts: **`patient@example.com`** and **`patient2@example.com`** (for concurrency demos).
+**Demo seed:** `npm run db:seed` — passwords **`password`** for seeded users. **Doctors** (each has `doctorRecordId` to a directory row; use any for slot-creation tests): **`doctor@example.com`** → Anna Volkova (cardiology), **`doctor2@example.com`** → Marcus Chen (dermatology), **`doctor3@example.com`** → Sophie Dubois (neurology). **Patients:** **`patient@example.com`**, **`patient2@example.com`** (concurrency demos). Demo slots start on the **first** doctor only.
 
 ---
 
@@ -35,9 +35,10 @@ Base: `http://localhost:3000` (see `PORT` in `.env`). Versioned API: **`/api/v1`
 | `GET` | `/api/v1/appointments` | **Patient JWT** | Same as `/my`: list **`req.user.id`** appointments |
 | `GET` | `/api/v1/appointments/my` | **Patient JWT** | List caller’s appointments |
 | `GET` | `/api/v1/appointments/doctor` | **Doctor JWT** + linked profile | Appointments on doctor’s slots |
-| `POST` | `/api/v1/appointments/waitlist` | **Patient JWT** | Join waitlist for a **booked** slot: `{ slotId }` → `201`. `400` `SLOT_STILL_AVAILABLE` if slot is still bookable; `409` `WAITLIST_DUPLICATE` |
-| `GET` | `/api/v1/appointments/waitlist/me` | **Patient JWT** | List caller’s waitlist rows (with slot times / `doctorId`) |
-| `DELETE` | `/api/v1/appointments/waitlist/:waitlistId` | **Patient JWT** | Remove own waitlist row → `200` `{ id, removed }` |
+| `POST` | `/api/v1/appointments/waitlist` | **Patient JWT** | Join waitlist for a **doctor**: `{ doctorId }` → `201`. One entry per patient+doctor; `409` `WAITLIST_DUPLICATE` if already queued. When any slot frees, oldest entry is **auto-promoted** to a new `pending` appointment. |
+| `GET` | `/api/v1/appointments/waitlist/me` | **Patient JWT** | List caller’s waitlist entries (with `doctorName`, `doctorSpecialty`) |
+| `DELETE` | `/api/v1/appointments/waitlist/:waitlistId` | **Patient JWT** | Remove own waitlist entry → `200` `{ id, removed }` |
+| `GET` | `/api/v1/doctors/me/waitlist` | **Doctor JWT** + linked profile | List patients waiting for an earlier slot with this doctor (with `patientName`, `patientEmail`) |
 | `POST` | `/api/v1/appointments` | **Patient JWT** | Book **`{ slotId }`** only; patient is **`req.user.id`** → `201` |
 | `PATCH` | `/api/v1/appointments/:id/cancel` | **Patient JWT** | Cancel if caller owns row; body **not** required (`patientId` from JWT) → `200` |
 | `PATCH` | `/api/v1/appointments/:id/confirm` | Doctor JWT | `pending` → `confirmed` |
@@ -60,7 +61,8 @@ Base: `http://localhost:3000` (see `PORT` in `.env`). Versioned API: **`/api/v1`
 | Area | Notes |
 |------|--------|
 | **Automated tests** | Planned later (`PROJECT_PLAN.md`): Supertest / Playwright when you lock flows. |
-| **Chaos / buggy modes** | Iteration 2 in `PROJECT_PLAN.md`. |
+| **Chaos mode** | Planned — random latency + 500 injection (`PROJECT_PLAN.md`). |
+| **Buggy branch** | `git checkout buggy` — 6 intentional defects for test suite validation (`BUGS.md`). |
 | **External AI provider** | Anthropic etc. — current `/ai/recommend-doctor` is **rule-based**; `ENABLE_AI_RECOMMENDATION` toggles the endpoint. |
 | **Waitlist → auto-book** | Waitlist rows are stored; automatic promotion when a slot frees is **not** implemented. |
 
