@@ -148,6 +148,14 @@ Order in this repo (see `src/app.js`):
 - **`src/middlewares/auth.js`** — **`requireAuth`** (Bearer) + **`requireRoles(...)`** for **401** / **403**.
 - **`JWT_SECRET`:** required in **production**; dev fallback in `src/config/env.js` (see `.env.example`).
 
+## Known security gap — doctor self-registration
+
+`POST /api/v1/auth/register` accepts `role: "doctor"` from any caller. The only guard is that the provided `doctorRecordId` must exist in the `doctors` table. Anyone who can enumerate valid IDs (1, 2, 3 — predictable after `db:seed`) can create a doctor-privileged account without any admin approval.
+
+**In a real system:** close this with one of: invite-token flow (admin creates a single-use link), admin-only endpoint for doctor account creation, or a pending-approval state before the account is activated.
+
+**Interview line:** *"I noticed that doctor registration only validates the record ID exists — there's no ownership proof or admin gate. In production I'd add an invite token or admin approval step."*
+
 ## AI (demo)
 
 - **`POST /api/v1/ai/recommend-doctor`** — rule-based **`src/services/aiRecommendation.js`** (keywords → allowed specialty → `doctorsRepository.getBySpecialty`); **422** `UNKNOWN_SPECIALTY` when no match.
