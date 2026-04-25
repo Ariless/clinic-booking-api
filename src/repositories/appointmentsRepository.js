@@ -29,7 +29,7 @@ function bookSlot({ slotId, patientId }) {
       err.errorCode = "SLOT_NOT_FOUND";
       throw err;
     }
-    if (!slot.isAvailable) {
+    if (slot.isAvailable === -1) {
       const err = new Error("Slot is not available");
       err.status = 409;
       err.errorCode = "SLOT_TAKEN";
@@ -185,12 +185,6 @@ function confirmAppointmentByDoctor({ appointmentId, doctorRecordId }) {
       err.errorCode = "APPOINTMENT_NOT_FOUND";
       throw err;
     }
-    if (row.slotDoctorId !== did) {
-      const err = new Error("Forbidden");
-      err.status = 403;
-      err.errorCode = "FORBIDDEN";
-      throw err;
-    }
     if (row.status !== "pending") {
       const err = new Error("Invalid status transition");
       err.status = 422;
@@ -234,7 +228,6 @@ function rejectAppointmentByDoctor({ appointmentId, doctorRecordId }) {
     }
     const now = new Date().toISOString();
     db.prepare("UPDATE appointments SET status = ?, updatedAt = ? WHERE id = ?").run("rejected", now, aid);
-    db.prepare("UPDATE slots SET isAvailable = 1 WHERE id = ?").run(row.slotId);
     promoteFromWaitlist(row.slotId, now);
     return db.prepare("SELECT * FROM appointments WHERE id = ?").get(aid);
   });

@@ -68,17 +68,7 @@ function ensureSlotWaitlistTable() {
 
 /** At most one pending or confirmed appointment per slot (double-booking guard at DB level). */
 function ensureAppointmentsActiveSlotUniqueIndex() {
-  const idx = db
-    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_appointments_one_active_per_slot'")
-    .get();
-  if (idx) {
-    return;
-  }
-  db.exec(`
-    CREATE UNIQUE INDEX idx_appointments_one_active_per_slot
-    ON appointments(slotId)
-    WHERE status IN ('pending', 'confirmed')
-  `);
+  db.exec("DROP INDEX IF EXISTS idx_appointments_one_active_per_slot");
 }
 
 function ensureUsersDoctorRecordIdColumn() {

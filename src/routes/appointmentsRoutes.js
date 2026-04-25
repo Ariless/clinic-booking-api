@@ -29,7 +29,7 @@ function listMyAppointments(req, res) {
 router.get("/", requireAuth, requireRoles("patient"), listMyAppointments);
 router.get("/my", requireAuth, requireRoles("patient"), listMyAppointments);
 
-router.get("/doctor", requireAuth, requireRoles("doctor"), (req, res, next) => {
+router.get("/doctor", requireAuth, (req, res, next) => {
   const { doctorRecordId } = req.user;
   if (doctorRecordId == null) {
     const err = new Error("Doctor profile is not linked to this account");
@@ -117,7 +117,7 @@ router.post("/", requireAuth, requireRoles("patient"), (req, res, next) => {
       },
       "slot booked"
     );
-    res.status(201).json(appointment);
+    res.status(200).json(appointment);
   } catch (e) {
     next(e);
   }

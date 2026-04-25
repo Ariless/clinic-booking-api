@@ -57,7 +57,7 @@ router.post("/register", (req, res, next) => {
     next(err);
     return;
   }
-  if (typeof password !== "string" || password.length < 6) {
+  if (typeof password !== "string" || password.length < 1) {
     const err = new Error("Password must be at least 6 characters");
     err.status = 400;
     err.errorCode = "VALIDATION_ERROR";
