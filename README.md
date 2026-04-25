@@ -8,7 +8,7 @@ A small **Node.js + Express** service plus a **static demo UI** (`public/`). It 
 
 - **Authentication** — patient/doctor sessions, **JWT** access + refresh (demo UI **`401` → refresh → retry**: **`API_ENDPOINTS.md`** → *Behaviour notes*, **`public/js/app-core.js`**).
 - **Appointment lifecycle** — book → **`pending`**; doctor confirm/reject; patient/doctor cancel per rules (**full graph:** **`CONTRACT_PACK.md`**).
-- **Waitlist** — join / list / leave on **booked** slots (**no auto-book** when a slot frees). Errors: **`API_ENDPOINTS.md`**.
+- **Waitlist** — join / list / leave per **doctor** (not per slot); when a slot frees the oldest waitlist entry is **auto-promoted** to a new `pending` appointment in the same transaction. Errors: **`API_ENDPOINTS.md`**.
 - **RBAC** — patient vs doctor on API and **`public/`** (guest vs signed-in behaviour: **`API_ENDPOINTS.md`**).
 - **AI recommendation** — optional, rule-based; **feature-flagged**, **rate-limited**; **`422` / `503` / `429`** — **`.env.example`**.
 
