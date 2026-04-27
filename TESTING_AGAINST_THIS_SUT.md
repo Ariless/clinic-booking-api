@@ -86,7 +86,7 @@ You do **not** need all four on every test; use **API for coverage density**, **
 ## 7. What this SUT does **not** include (avoid false claims)
 
 - **No `npm test`** in this repository; CI here is **`npm run lint`** only.
-- **No shipped “chaos” / “buggy” API mode** in runtime — those remain **plan/backlog** (**`PROJECT_PLAN.md`**). Do not document them as live switches until implemented.
+- **No “chaos” runtime mode** — still backlog. A **`buggy` git branch** exists (see **`BUGS.md`**) with 6 intentional defects at easy/medium/hard levels; run your test suite against that branch to verify regression coverage. It is a static code change, not a runtime switch.
 - **“AI fallback”** today means: **rule-based** recommendation path, optional **503** when disabled, **429** under throttle — not a separate external LLM failover unless you add it later.
 
 ---
@@ -131,8 +131,9 @@ Use a **two-repo** story only if both exist: **(1) SUT** — this service + demo
 
 **Do not imply these are already live in the SUT** (unless you implement or simulate them in the framework and say so explicitly):
 
-- **“Chaos” / “buggy” API runtime modes** — still **backlog** (**`PROJECT_PLAN.md`**), not switches you can turn on today.
-- **“Environment switching normal / buggy / chaos”** — only a strong resume line once **`baseURL`** or **fault injection** is real in your test stack or the API gains those modes.
+- **”Chaos” runtime mode** — still backlog, not a live switch.
+- **`buggy` branch** — exists with 6 documented defects (**`BUGS.md`**); say “I run my suite against a buggy branch and verify all affected tests fail” — that is defensible.
+- **”Environment switching normal / buggy / chaos”** — only a strong resume line once `baseURL` switching between branches is real in your CI setup.
 
 **Example one-liner (English, defensible now):**
 

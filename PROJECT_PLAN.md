@@ -47,6 +47,11 @@ Current checkpoint:
 
 1. ~~**`appointments.booking.conflict`**~~ **Done** in companion: `appointments.booking.conflict.test.js` (`@api`) — patient A books (`201`), patient B `POST /appointments` same **`slotId`** → **`409`**, **`errorCode`** `SLOT_TAKEN` (fixture **`user`** + **`seedPatient`**).
 2. **`appointments.cancel.patient`:** `PATCH /api/v1/appointments/:id/cancel` as patient from **pending** (and optionally **confirmed** per policy) → cancelled + **slot availability** story matches `API_ENDPOINTS.md` / repository behaviour.
+3. **Rate limit tests** (added 2026-04-27 — `loginLimiter` / `registerLimiter` / `bookingLimiter` in `src/middlewares/rate-limit.js`):
+   - Login `429` → new describe block in **`auth.login.test.js`** (override `RATE_LIMIT_LOGIN_MAX` in test env)
+   - Register `429` → new describe block in **`auth.register.test.js`** (override `RATE_LIMIT_REGISTER_MAX`)
+   - Booking `429` → new file **`appointments.booking.rate-limit.test.js`** (override `RATE_LIMIT_BOOKING_MAX`)
+   - All three expect `errorCode: "RATE_LIMITED"` + `429`; see `src/middlewares/rate-limit.js` for label in the message.
 
 ### Second wave (optional)
 
@@ -405,13 +410,14 @@ Error format:
 
 ### Iteration 2 — QA Modes + Full Test Coverage
 - [ ] Buggy mode (preset + optional per-bug flags)
-- [ ] Chaos mode (probability config + latency + optional empty body)
+- [x] Chaos mode (`CHAOS_ENABLED` / `CHAOS_FAIL_PROBABILITY` / `CHAOS_LATENCY_MS` / `CHAOS_SEED` — deterministic RNG for test reproducibility; mounted at `/api/v1`; health exposes chaos state)
 - [ ] Full API/E2E breadth in **companion** test repo (expand beyond current API files; UI/e2e per `E2E_TEST_PLAN.md` §9); optional extra modes here remain future work
 - [ ] Mode-aware suites (normal green, buggy demo suite isolated)
 - [ ] Chaos deterministic testing with `CHAOS_SEED`
 
 ### Iteration 2.5 — Production Patterns
 - [x] Rate limiting for AI endpoint (default 5 req / 60s per IP + optional `Authorization` hash)
+- [x] Rate limiting for login / register / booking (`express-rate-limit`; configurable windows + max via env)
 - [x] Rich **`GET /health`** (DB + AI availability flags)
 - [x] Soft delete (`deletedAt`) on **`users`** (account close demo); appointments rows use `deletedAt` column in schema but business flow is status-based
 - [x] `ENABLE_AI_RECOMMENDATION` feature flag
