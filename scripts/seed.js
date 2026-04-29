@@ -43,6 +43,8 @@ const insertUser = db.prepare(
 insertUser.run("admin@example.com", passwordHash, "admin", "Admin", now, now, null, null);
 insertUser.run("user@example.com", passwordHash, "user", "User", now, now, null, null);
 insertUser.run("doctor@example.com", passwordHash, "doctor", "Doctor", now, now, null, null);
+insertUser.run("doctor2@example.com", passwordHash, "doctor", "Doctor Two", now, now, null, null);
+insertUser.run("doctor3@example.com", passwordHash, "doctor", "Doctor Three", now, now, null, null);
 insertUser.run("patient@example.com", passwordHash, "patient", "Patient", now, now, null, null);
 insertUser.run("patient2@example.com", passwordHash, "patient", "Patient Two", now, now, null, null);
 insertUser.run("reception@example.com", passwordHash, "reception", "Reception", now, now, null, null);
@@ -50,6 +52,14 @@ insertUser.run("manager@example.com", passwordHash, "manager", "Manager", now, n
 
 const doctorUserRow = db.prepare("SELECT id FROM users WHERE email = ?").get("doctor@example.com");
 db.prepare("UPDATE users SET doctorRecordId = ? WHERE id = ?").run(doctorId, doctorUserRow.id);
+
+const doctor2Row = db.prepare("SELECT id FROM doctors WHERE name = ?").get("Jane Smith");
+const doctor2UserRow = db.prepare("SELECT id FROM users WHERE email = ?").get("doctor2@example.com");
+db.prepare("UPDATE users SET doctorRecordId = ? WHERE id = ?").run(doctor2Row.id, doctor2UserRow.id);
+
+const doctor3Row = db.prepare("SELECT id FROM doctors WHERE name = ?").get("Jim Beam");
+const doctor3UserRow = db.prepare("SELECT id FROM users WHERE email = ?").get("doctor3@example.com");
+db.prepare("UPDATE users SET doctorRecordId = ? WHERE id = ?").run(doctor3Row.id, doctor3UserRow.id);
 
 const firstSlotRow = db.prepare("SELECT id FROM slots WHERE isAvailable = 1 ORDER BY id LIMIT 1").get();
 
