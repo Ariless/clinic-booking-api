@@ -61,10 +61,8 @@ Base: `http://localhost:3000` (see `PORT` in `.env`). Versioned API: **`/api/v1`
 | Area | Notes |
 |------|--------|
 | **Automated tests** | Planned later (`PROJECT_PLAN.md`): Supertest / Playwright when you lock flows. |
-| **Chaos mode** | Planned — random latency + 500 injection (`PROJECT_PLAN.md`). |
 | **Buggy branch** | `git checkout buggy` — 6 intentional defects for test suite validation (`BUGS.md`). |
 | **External AI provider** | Anthropic etc. — current `/ai/recommend-doctor` is **rule-based**; `ENABLE_AI_RECOMMENDATION` toggles the endpoint. |
-| **Waitlist → auto-book** | Waitlist rows are stored; automatic promotion when a slot frees is **not** implemented. |
 
 ---
 
@@ -87,5 +85,9 @@ Base: `http://localhost:3000` (see `PORT` in `.env`). Versioned API: **`/api/v1`
 | `AUTO_EXPIRE_PENDING_INTERVAL_MS` | If `> 0`, interval to cancel stale **`pending`** rows and free slots (default `0` = off) |
 | `AUTO_EXPIRE_PENDING_MAX_AGE_MS` | Age threshold for expiring `pending` (default 7 days) |
 | `ENABLE_DEBUG_ROUTES` | `true` / `false` — mount debug routes in **development** only (default `false`) |
+| `CHAOS_ENABLED` | `true` / `false` — master fault-injection switch (default `false`) |
+| `CHAOS_FAIL_PROBABILITY` | Float 0–1 — probability each `/api/v1` request returns `503` `CHAOS_ERROR` (default `0.2`) |
+| `CHAOS_LATENCY_MS` | Non-negative int — max ms of random delay on non-failing requests (default `0`) |
+| `CHAOS_SEED` | String seed for deterministic Mulberry32 RNG; unset = `Math.random()` |
 
 See **`.env.example`**. Logging: **`README.md` → Logging (observability)**. Quality gates: **`quality-strategy.md`**.

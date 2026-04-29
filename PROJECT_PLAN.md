@@ -248,10 +248,10 @@ Allowed specialties:
 - Use: `git checkout buggy && npm run db:seed && npm run dev`
 - Companion test suite should produce 6 failures, all other tests green
 
-### chaos (planned)
-- Random 500 errors (configurable probability)
-- Random latency injection
-- Validates test suite resilience to flakiness and retry logic
+### chaos
+- `CHAOS_ENABLED` / `CHAOS_FAIL_PROBABILITY` / `CHAOS_LATENCY_MS` / `CHAOS_SEED` env vars (deterministic Mulberry32 RNG with seed)
+- Random 503s and latency on all `/api/v1` routes; `/health` unaffected
+- Tests in companion repo: `chaos.test.js` (skip guard; requires `CHAOS_ENABLED=true CHAOS_FAIL_PROBABILITY=1`)
 
 ---
 

@@ -30,7 +30,8 @@ The static demo under `public/*.html` is the surface future **Playwright** (or s
 ## Deferred (by design)
 
 - **Automated API / E2E tests** — not wired yet; the goal is to add **Playwright** and targeted API checks once flows are stable enough that tests are explanatory rather than noise. Until then, manual exploratory testing and lint are the primary gates.
-- **Load / chaos / mutation testing** — out of scope for this learning repository unless explicitly added later.
+- **Chaos mode** — implemented in `src/middlewares/chaos.js` (env-controlled fault injection; see **`README.md`** → *Configuration*). Companion framework tests in `chaos.test.js`.
+- **Load / mutation testing** — out of scope for this learning repository unless explicitly added later.
 
 ## Operational checks (manual)
 

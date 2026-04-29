@@ -79,14 +79,15 @@ You do **not** need all four on every test; use **API for coverage density**, **
 2. **Domain:** after **`POST /api/v1/appointments`**, slot disappears from **`GET /api/v1/doctors/:id/slots`** when booked; transitions match **`CONTRACT_PACK.md`**.
 3. **Rate limit:** rapid **`POST /api/v1/ai/recommend-doctor`** → **`429`** `RATE_LIMITED` — throttle tests or space calls.
 4. **Feature off:** `ENABLE_AI_RECOMMENDATION=false` → **`503`** `FEATURE_DISABLED` (assert stable code).
-5. **Concurrency narrative:** with **`NODE_ENV=development`** and **`ENABLE_DEBUG_ROUTES=true`**, **`POST /api/v1/debug/simulate-concurrent-booking`** documents sequential double-book; for **true** races use **two parallel HTTP clients** from your runner (same body shape as in **`API_ENDPOINTS.md`**).
+5. **Chaos mode:** `CHAOS_ENABLED=true CHAOS_FAIL_PROBABILITY=1` → every `/api/v1` request returns **`503`** `CHAOS_ERROR`; **`GET /health`** is unaffected (mounted outside `/api/v1`). Companion framework test: `chaos.test.js` (skip guard; requires server restart with fault-injection env).
+6. **Concurrency narrative:** with **`NODE_ENV=development`** and **`ENABLE_DEBUG_ROUTES=true`**, **`POST /api/v1/debug/simulate-concurrent-booking`** documents sequential double-book; for **true** races use **two parallel HTTP clients** from your runner (same body shape as in **`API_ENDPOINTS.md`**).
 
 ---
 
 ## 7. What this SUT does **not** include (avoid false claims)
 
 - **No `npm test`** in this repository; CI here is **`npm run lint`** only.
-- **No “chaos” runtime mode** — still backlog. A **`buggy` git branch** exists (see **`BUGS.md`**) with 6 intentional defects at easy/medium/hard levels; run your test suite against that branch to verify regression coverage. It is a static code change, not a runtime switch.
+- **Chaos runtime mode** — implemented in `src/middlewares/chaos.js`; controlled via env vars **`CHAOS_ENABLED`**, **`CHAOS_FAIL_PROBABILITY`**, **`CHAOS_LATENCY_MS`**, **`CHAOS_SEED`**. Injects random 503s and latency on all `/api/v1` routes; `/health` is unaffected. Companion framework tests: `chaos.test.js` (skip guard; restart server with `CHAOS_ENABLED=true CHAOS_FAIL_PROBABILITY=1` to run). A **`buggy` git branch** also exists (see **`BUGS.md`**) with 6 intentional defects at easy/medium/hard levels; run your test suite against that branch to verify regression coverage.
 - **“AI fallback”** today means: **rule-based** recommendation path, optional **503** when disabled, **429** under throttle — not a separate external LLM failover unless you add it later.
 
 ---
@@ -131,9 +132,8 @@ Use a **two-repo** story only if both exist: **(1) SUT** — this service + demo
 
 **Do not imply these are already live in the SUT** (unless you implement or simulate them in the framework and say so explicitly):
 
-- **”Chaos” runtime mode** — still backlog, not a live switch.
 - **`buggy` branch** — exists with 6 documented defects (**`BUGS.md`**); say “I run my suite against a buggy branch and verify all affected tests fail” — that is defensible.
-- **”Environment switching normal / buggy / chaos”** — only a strong resume line once `baseURL` switching between branches is real in your CI setup.
+- **”Environment switching normal / buggy / chaos”** — defensible now: chaos middleware is implemented, `chaos.test.js` exists in the framework repo (skip guard; runs when server is restarted with the fault-injection env). Say “I have three modes — normal, buggy branch, and chaos fault injection — and tests covering each.”
 
 **Example one-liner (English, defensible now):**
 

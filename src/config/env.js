@@ -97,6 +97,17 @@ const AUTO_EXPIRE_PENDING_MAX_AGE_MS = parsePositiveInt(
 /** Exposes POST /api/v1/debug/* (only when NODE_ENV is `development`). */
 const ENABLE_DEBUG_ROUTES = parseBool(process.env.ENABLE_DEBUG_ROUTES, false);
 
+const CHAOS_ENABLED = parseBool(process.env.CHAOS_ENABLED, false);
+const CHAOS_FAIL_PROBABILITY = (() => {
+  const raw = process.env.CHAOS_FAIL_PROBABILITY;
+  if (raw === undefined || raw === "") return 0.2;
+  const n = parseFloat(raw);
+  if (isNaN(n) || n < 0 || n > 1) throw new Error(`Invalid CHAOS_FAIL_PROBABILITY: ${raw}`);
+  return n;
+})();
+const CHAOS_LATENCY_MS = parseNonNegativeInt(process.env.CHAOS_LATENCY_MS, 0);
+const CHAOS_SEED = process.env.CHAOS_SEED ?? null;
+
 const env = {
   PORT,
   NODE_ENV,
@@ -113,6 +124,10 @@ const env = {
   AUTO_EXPIRE_PENDING_INTERVAL_MS,
   AUTO_EXPIRE_PENDING_MAX_AGE_MS,
   ENABLE_DEBUG_ROUTES,
+  CHAOS_ENABLED,
+  CHAOS_FAIL_PROBABILITY,
+  CHAOS_LATENCY_MS,
+  CHAOS_SEED,
 };
 
 module.exports = env;

@@ -114,7 +114,7 @@ Unknown routes → **404** with the same error JSON shape.
 
 ## Configuration
 
-Copy **`.env.example`** → **`.env`**. Important keys: **`PORT`**, **`NODE_ENV`**, **`DATABASE_PATH`**, **`JWT_SECRET`**, **`ENABLE_AI_RECOMMENDATION`** / **`AI_RATE_LIMIT_*`**, **`AUTO_EXPIRE_PENDING_*`**, **`ENABLE_DEBUG_ROUTES`** (dev-only debug routes), **`TRUST_PROXY`**, **`LOG_LEVEL`** / **`LOG_PRETTY`**. Logging behaviour: **`quality-strategy.md`**.
+Copy **`.env.example`** → **`.env`**. Important keys: **`PORT`**, **`NODE_ENV`**, **`DATABASE_PATH`**, **`JWT_SECRET`**, **`ENABLE_AI_RECOMMENDATION`** / **`AI_RATE_LIMIT_*`**, **`AUTO_EXPIRE_PENDING_*`**, **`ENABLE_DEBUG_ROUTES`** (dev-only debug routes), **`TRUST_PROXY`**, **`LOG_LEVEL`** / **`LOG_PRETTY`**, **`CHAOS_ENABLED`** / **`CHAOS_FAIL_PROBABILITY`** / **`CHAOS_LATENCY_MS`** / **`CHAOS_SEED`** (fault injection). Logging behaviour: **`quality-strategy.md`**.
 
 ---
 

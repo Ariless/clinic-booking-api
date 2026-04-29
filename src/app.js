@@ -11,6 +11,7 @@ const aiRoutes = require("./routes/aiRoutes");
 const doctorsRoutes = require("./routes/doctorsRoutes");
 const appointmentsRoutes = require("./routes/appointmentsRoutes");
 const { mountSwagger } = require("./swagger");
+const { chaos } = require("./middlewares/chaos");
 const env = require("./config/env");
 const app = express();
 
@@ -29,6 +30,7 @@ app.use(requestId);
 app.use(httpLogger());
 app.use(express.json());
 
+app.use("/api/v1", chaos);
 app.use("/api/v1/auth", authRoutes);
 if (env.NODE_ENV === "development" && env.ENABLE_DEBUG_ROUTES) {
   app.use("/api/v1/debug", require("./routes/debugRoutes"));
