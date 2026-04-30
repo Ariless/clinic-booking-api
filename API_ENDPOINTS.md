@@ -81,6 +81,12 @@ Base: `http://localhost:3000` (see `PORT` in `.env`). Versioned API: **`/api/v1`
 | `ENABLE_AI_RECOMMENDATION` | `true` / `false` — AI POST enabled (default `true`) |
 | `AI_RATE_LIMIT_WINDOW_MS` | AI throttle window in ms (default `60000`) |
 | `AI_RATE_LIMIT_MAX` | Max AI POSTs per window per client key (default `5`) |
+| `RATE_LIMIT_LOGIN_WINDOW_MS` | Login throttle window in ms (default `900000` = 15 min) |
+| `RATE_LIMIT_LOGIN_MAX` | Max login attempts per IP per window (default `10`) |
+| `RATE_LIMIT_REGISTER_WINDOW_MS` | Register throttle window in ms (default `3600000` = 1 h) |
+| `RATE_LIMIT_REGISTER_MAX` | Max register attempts per IP per window (default `5`) |
+| `RATE_LIMIT_BOOKING_WINDOW_MS` | Booking throttle window in ms (default `60000` = 1 min) |
+| `RATE_LIMIT_BOOKING_MAX` | Max booking attempts per IP per window (default `20`) |
 | `TRUST_PROXY` | `true` / `false` — Express `trust proxy` for correct `req.ip` behind a proxy |
 | `AUTO_EXPIRE_PENDING_INTERVAL_MS` | If `> 0`, interval to cancel stale **`pending`** rows and free slots (default `0` = off) |
 | `AUTO_EXPIRE_PENDING_MAX_AGE_MS` | Age threshold for expiring `pending` (default 7 days) |

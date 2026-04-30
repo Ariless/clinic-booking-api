@@ -46,12 +46,8 @@ Current checkpoint:
 ### Must-add API tests (next implementation batch in `clinic-booking-api-tests`)
 
 1. ~~**`appointments.booking.conflict`**~~ **Done** in companion: `appointments.booking.conflict.test.js` (`@api`) — patient A books (`201`), patient B `POST /appointments` same **`slotId`** → **`409`**, **`errorCode`** `SLOT_TAKEN` (fixture **`user`** + **`seedPatient`**).
-2. **`appointments.cancel.patient`:** `PATCH /api/v1/appointments/:id/cancel` as patient from **pending** (and optionally **confirmed** per policy) → cancelled + **slot availability** story matches `API_ENDPOINTS.md` / repository behaviour.
-3. **Rate limit tests** (added 2026-04-27 — `loginLimiter` / `registerLimiter` / `bookingLimiter` in `src/middlewares/rate-limit.js`):
-   - Login `429` → new describe block in **`auth.login.test.js`** (override `RATE_LIMIT_LOGIN_MAX` in test env)
-   - Register `429` → new describe block in **`auth.register.test.js`** (override `RATE_LIMIT_REGISTER_MAX`)
-   - Booking `429` → new file **`appointments.booking.rate-limit.test.js`** (override `RATE_LIMIT_BOOKING_MAX`)
-   - All three expect `errorCode: "RATE_LIMITED"` + `429`; see `src/middlewares/rate-limit.js` for label in the message.
+2. ~~**`appointments.cancel.patient`**~~ **Done** in companion: `appointments.cancel.patient.test.js` (`@api`) — `PATCH /api/v1/appointments/:id/cancel` → `200`, status `cancelled`, slot freed and visible in public doctor slots.
+3. ~~**Rate limit tests**~~ **Done** in companion: describe blocks in **`auth.login.test.js`** and **`auth.register.test.js`** + new file **`appointments.booking.rate-limit.test.js`** (`@rate-limit`). Run with env overrides: `RATE_LIMIT_LOGIN_MAX=2 RATE_LIMIT_LOGIN_WINDOW_MS=5000`, `RATE_LIMIT_REGISTER_MAX=2 RATE_LIMIT_REGISTER_WINDOW_MS=5000`, `RATE_LIMIT_BOOKING_MAX=2 RATE_LIMIT_BOOKING_WINDOW_MS=5000`. All expect `errorCode: "RATE_LIMITED"` + `429`.
 
 ### Second wave (optional)
 
@@ -417,7 +413,7 @@ Error format:
 
 ### Iteration 2.5 — Production Patterns
 - [x] Rate limiting for AI endpoint (default 5 req / 60s per IP + optional `Authorization` hash)
-- [x] Rate limiting for login / register / booking (`express-rate-limit`; configurable windows + max via env)
+- [x] Rate limiting for login / register / booking (`express-rate-limit`; configurable windows + max via env; `src/middlewares/rate-limit.js`)
 - [x] Rich **`GET /health`** (DB + AI availability flags)
 - [x] Soft delete (`deletedAt`) on **`users`** (account close demo); appointments rows use `deletedAt` column in schema but business flow is status-based
 - [x] `ENABLE_AI_RECOMMENDATION` feature flag

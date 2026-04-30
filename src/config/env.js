@@ -76,6 +76,18 @@ const AI_RATE_LIMIT_WINDOW_MS = parsePositiveInt(process.env.AI_RATE_LIMIT_WINDO
 /** Max AI recommendation requests per window per client key (IP + optional auth hash). */
 const AI_RATE_LIMIT_MAX = parsePositiveInt(process.env.AI_RATE_LIMIT_MAX, 5);
 
+/** Login rate limit: max attempts per IP per window. */
+const RATE_LIMIT_LOGIN_WINDOW_MS = parsePositiveInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MS, 15 * 60 * 1000);
+const RATE_LIMIT_LOGIN_MAX = parsePositiveInt(process.env.RATE_LIMIT_LOGIN_MAX, 10);
+
+/** Register rate limit: max attempts per IP per window. */
+const RATE_LIMIT_REGISTER_WINDOW_MS = parsePositiveInt(process.env.RATE_LIMIT_REGISTER_WINDOW_MS, 60 * 60 * 1000);
+const RATE_LIMIT_REGISTER_MAX = parsePositiveInt(process.env.RATE_LIMIT_REGISTER_MAX, 5);
+
+/** Booking rate limit: max attempts per IP per window. */
+const RATE_LIMIT_BOOKING_WINDOW_MS = parsePositiveInt(process.env.RATE_LIMIT_BOOKING_WINDOW_MS, 60 * 1000);
+const RATE_LIMIT_BOOKING_MAX = parsePositiveInt(process.env.RATE_LIMIT_BOOKING_MAX, 20);
+
 /** Trust `X-Forwarded-*` when behind a reverse proxy (e.g. Docker). */
 const TRUST_PROXY = parseBool(process.env.TRUST_PROXY, false);
 
@@ -120,6 +132,12 @@ const env = {
   ENABLE_AI_RECOMMENDATION,
   AI_RATE_LIMIT_WINDOW_MS,
   AI_RATE_LIMIT_MAX,
+  RATE_LIMIT_LOGIN_WINDOW_MS,
+  RATE_LIMIT_LOGIN_MAX,
+  RATE_LIMIT_REGISTER_WINDOW_MS,
+  RATE_LIMIT_REGISTER_MAX,
+  RATE_LIMIT_BOOKING_WINDOW_MS,
+  RATE_LIMIT_BOOKING_MAX,
   TRUST_PROXY,
   AUTO_EXPIRE_PENDING_INTERVAL_MS,
   AUTO_EXPIRE_PENDING_MAX_AGE_MS,

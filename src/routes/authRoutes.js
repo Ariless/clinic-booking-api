@@ -5,6 +5,7 @@ const env = require("../config/env");
 const usersRepository = require("../repositories/usersRepository");
 const doctorsRepository = require("../repositories/doctorsRepository");
 const { requireAuth } = require("../middlewares/auth");
+const { loginLimiter, registerLimiter } = require("../middlewares/rate-limit");
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ function byteLengthUtf8(str) {
   return Buffer.byteLength(str, "utf8");
 }
 
-router.post("/register", (req, res, next) => {
+router.post("/register", registerLimiter, (req, res, next) => {
   const { email, password, name, role, doctorRecordId } = req.body ?? {};
   if (!isNonEmptyString(email) || !EMAIL_RE.test(email.trim())) {
     const err = new Error("Valid email is required");
@@ -172,7 +173,7 @@ router.delete("/me", requireAuth, (req, res, next) => {
   res.status(204).end();
 });
 
-router.post("/login", (req, res, next) => {
+router.post("/login", loginLimiter, (req, res, next) => {
   const { email, password } = req.body ?? {};
   if (!isNonEmptyString(email) || !isNonEmptyString(password)) {
     const err = new Error("email and password are required");

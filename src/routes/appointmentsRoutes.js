@@ -3,6 +3,7 @@ const appointmentsRepository = require("../repositories/appointmentsRepository")
 const waitlistRepository = require("../repositories/waitlistRepository");
 const metrics = require("../metrics");
 const { requireAuth, requireRoles } = require("../middlewares/auth");
+const { bookingLimiter } = require("../middlewares/rate-limit");
 
 const router = express.Router();
 
@@ -94,7 +95,7 @@ router.delete("/waitlist/:waitlistId", requireAuth, requireRoles("patient"), (re
   }
 });
 
-router.post("/", requireAuth, requireRoles("patient"), (req, res, next) => {
+router.post("/", bookingLimiter, requireAuth, requireRoles("patient"), (req, res, next) => {
   const { slotId } = req.body ?? {};
   if (!isPositiveInteger(slotId)) {
     const err = new Error("slotId must be a positive integer");
