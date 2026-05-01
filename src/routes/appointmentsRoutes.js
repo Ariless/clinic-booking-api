@@ -266,7 +266,7 @@ router.patch("/:id/cancel-as-doctor", requireAuth, requireRoles("doctor"), (req,
   }
 });
 
-router.get("/:id", (req, res, next) => {
+router.get("/:id", requireAuth, (req, res, next) => {
   const id = parsePositiveIntegerParam(req.params.id);
   if (id === null) {
     const err = new Error("Invalid appointment id");
@@ -280,6 +280,15 @@ router.get("/:id", (req, res, next) => {
     const err = new Error("Appointment not found");
     err.status = 404;
     err.errorCode = "APPOINTMENT_NOT_FOUND";
+    next(err);
+    return;
+  }
+  // Ownership check: patient sees only their own; doctor sees only appointments on their slots
+  const { id: userId, role } = req.user;
+  if (role === "patient" && appointment.patientId !== userId) {
+    const err = new Error("Forbidden");
+    err.status = 403;
+    err.errorCode = "FORBIDDEN";
     next(err);
     return;
   }
