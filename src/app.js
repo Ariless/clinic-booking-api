@@ -10,7 +10,6 @@ const authRoutes = require("./routes/authRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 const doctorsRoutes = require("./routes/doctorsRoutes");
 const appointmentsRoutes = require("./routes/appointmentsRoutes");
-const consultationsRoutes = require("./routes/consultationsRoutes");
 const { mountSwagger } = require("./swagger");
 const { chaos } = require("./middlewares/chaos");
 const env = require("./config/env");
@@ -39,7 +38,6 @@ if (env.NODE_ENV === "development" && env.ENABLE_DEBUG_ROUTES) {
 app.use("/api/v1/ai", aiRoutes);
 app.use("/api/v1/doctors", doctorsRoutes);
 app.use("/api/v1/appointments", appointmentsRoutes);
-app.use("/api/v1/consultations", consultationsRoutes);
 app.use("/api/v1", indexRoutes);
 mountSwagger(app);
 
@@ -68,7 +66,6 @@ app.get("/register", sendPublicHtml("register.html"));
 app.get("/", sendPublicHtml("index.html"));
 app.get("/patient/booking", sendPublicHtml("patient-booking.html"));
 app.get("/patient/appointments", sendPublicHtml("patient-appointments.html"));
-app.get("/patient/consultations", sendPublicHtml("patient-consultations.html"));
 app.get("/patient/notifications", sendPublicHtml("patient-notifications.html"));
 app.get("/patient/account", sendPublicHtml("patient-account.html"));
 app.get("/patient", sendPublicHtml("patient.html"));
