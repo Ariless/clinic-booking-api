@@ -120,6 +120,18 @@ const CHAOS_FAIL_PROBABILITY = (() => {
 const CHAOS_LATENCY_MS = parseNonNegativeInt(process.env.CHAOS_LATENCY_MS, 0);
 const CHAOS_SEED = process.env.CHAOS_SEED ?? null;
 
+/** Optional URL to POST appointment status-change events to. Omit to disable webhooks. */
+const WEBHOOK_URL = process.env.WEBHOOK_URL || null;
+
+/** Payment mode for consultations: disabled | mock_success | mock_fail */
+const PAYMENT_MODE = (() => {
+  const raw = process.env.PAYMENT_MODE || "disabled";
+  if (!["disabled", "mock_success", "mock_fail"].includes(raw)) {
+    throw new Error(`Invalid PAYMENT_MODE: ${raw}`);
+  }
+  return raw;
+})();
+
 const env = {
   PORT,
   NODE_ENV,
@@ -146,6 +158,8 @@ const env = {
   CHAOS_FAIL_PROBABILITY,
   CHAOS_LATENCY_MS,
   CHAOS_SEED,
+  WEBHOOK_URL,
+  PAYMENT_MODE,
 };
 
 module.exports = env;

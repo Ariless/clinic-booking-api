@@ -40,6 +40,9 @@ function migrate() {
   ensureUsersDoctorRecordIdColumn();
   ensureAppointmentsActiveSlotUniqueIndex();
   ensureSlotWaitlistTable();
+  ensureWaitlistOffersTable();
+  ensureConsultationsTable();
+  ensurePaymentsTable();
 }
 
 function ensureSlotWaitlistTable() {
@@ -86,6 +89,59 @@ function ensureUsersDoctorRecordIdColumn() {
   if (!cols.some((c) => c.name === "doctorRecordId")) {
     db.exec("ALTER TABLE users ADD COLUMN doctorRecordId INTEGER");
   }
+}
+
+function ensureWaitlistOffersTable() {
+  const t = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'waitlist_offers'").get();
+  if (t) return;
+  db.exec(`
+    CREATE TABLE waitlist_offers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slotId INTEGER NOT NULL,
+      patientId INTEGER NOT NULL,
+      existingAppointmentId INTEGER,
+      status TEXT NOT NULL DEFAULT 'pending',
+      expiresAt TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+    CREATE INDEX idx_waitlist_offers_patient ON waitlist_offers(patientId);
+    CREATE INDEX idx_waitlist_offers_slot ON waitlist_offers(slotId);
+  `);
+}
+
+function ensureConsultationsTable() {
+  const t = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'consultations'").get();
+  if (t) return;
+  db.exec(`
+    CREATE TABLE consultations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      doctorId INTEGER NOT NULL,
+      patientId INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'confirmed',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+    CREATE INDEX idx_consultations_patient ON consultations(patientId);
+  `);
+}
+
+function ensurePaymentsTable() {
+  const t = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payments'").get();
+  if (t) return;
+  db.exec(`
+    CREATE TABLE payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      consultationId INTEGER,
+      patientId INTEGER NOT NULL,
+      paymentMethod TEXT NOT NULL,
+      status TEXT NOT NULL,
+      amount INTEGER NOT NULL DEFAULT 5000,
+      idempotencyKey TEXT UNIQUE,
+      createdAt TEXT NOT NULL
+    );
+    CREATE INDEX idx_payments_patient ON payments(patientId);
+  `);
 }
 
 module.exports = { migrate };
