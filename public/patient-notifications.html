@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Patient — Notifications</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body data-qa="page-patient-notifications">
+    <header class="site-header" data-qa="site-header">
+      <div class="header-left">
+        <a class="brand" href="/" data-qa="site-brand">Clinic booking</a>
+      </div>
+      <nav class="user-nav" aria-label="Account" data-qa="site-user-nav">
+        <span id="navAuth" class="muted" style="margin: 0" data-qa="site-auth-label"></span>
+        <a href="/login" id="loginNav" data-qa="site-login">Sign in</a>
+        <button type="button" id="logoutBtn" class="secondary" style="display: none; margin-top: 0" data-qa="site-logout">
+          Sign out
+        </button>
+      </nav>
+    </header>
+
+    <nav class="patient-subnav" aria-label="Patient workspace" data-qa="patient-nav">
+      <a href="/patient" data-patient-nav="dashboard" data-qa="patient-nav-dashboard">Dashboard</a>
+      <a href="/patient/booking" data-patient-nav="booking" data-qa="patient-nav-booking">Booking</a>
+      <a href="/patient/appointments" data-patient-nav="appointments" data-qa="patient-nav-appointments">Appointments</a>
+      <a href="/patient/consultations" data-patient-nav="consultations" data-qa="patient-nav-consultations">Consultations</a>
+      <a href="/patient/notifications" data-patient-nav="notifications" data-qa="patient-nav-notifications">Notifications</a>
+      <a href="/patient/account" data-patient-nav="account" data-qa="patient-nav-account">Account</a>
+    </nav>
+
+    <div id="notifGuestGate" class="empty-panel" style="display: none" data-qa="patient-notif-guest-gate">
+      <p style="margin: 0 0 0.5rem">
+        Real-time notifications are available to <strong>signed-in patients</strong> only.
+      </p>
+      <p style="margin: 0">
+        <a href="/login" data-qa="patient-notif-guest-login">Sign in</a> ·
+        <a href="/register/patient" data-qa="patient-notif-guest-register">Create patient account</a>
+      </p>
+    </div>
+
+    <section id="notifSection" style="display: none" data-qa="patient-notif-section">
+      <h2 style="margin: 0 0 0.25rem; font-size: 1rem" data-qa="patient-notif-title">Live notifications</h2>
+      <p class="muted" style="margin: 0 0 1rem">
+        Updates from the clinic appear here in real time. Notifications are shown for the current session only.
+      </p>
+
+      <div id="wsStatus" class="muted" style="margin-bottom: 0.75rem; font-size: 0.85rem" data-qa="patient-notif-ws-status">
+        Connecting…
+      </div>
+
+      <div id="notifEmpty" class="empty-panel" data-qa="patient-notif-empty">
+        No notifications yet. They'll appear here when the clinic updates your appointments.
+      </div>
+
+      <ul id="notifList" style="display: none; margin-top: 0" data-qa="patient-notif-list"></ul>
+    </section>
+
+    <details class="technical" data-qa="patient-notif-tech-details">
+      <summary>Technical details (optional)</summary>
+      <pre id="log" style="margin-top: 0.5rem" data-qa="patient-notif-tech-log">—</pre>
+    </details>
+
+    <script src="/js/app-core.js"></script>
+    <script src="/js/app-nav.js"></script>
+    <script src="/js/patient-shell.js"></script>
+    <script>
+      (function () {
+        if (!window.ClinicPatientShell.guardDoctorRedirect()) {
+          return;
+        }
+        window.ClinicPatientShell.setActiveNav("notifications");
+
+        const logEl = document.getElementById("log");
+        const notifGuestGate = document.getElementById("notifGuestGate");
+        const notifSection = document.getElementById("notifSection");
+        const wsStatus = document.getElementById("wsStatus");
+        const notifList = document.getElementById("notifList");
+        const notifEmpty = document.getElementById("notifEmpty");
+
+        function log(obj) {
+          logEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+        }
+
+        function eventLabel(event) {
+          if (event === "appointment.confirmed") return "Your appointment was confirmed";
+          if (event === "appointment.rejected") return "Your appointment was declined by the clinic";
+          if (event === "appointment.cancelled_by_doctor") return "Your appointment was cancelled by the clinic";
+          return event;
+        }
+
+        function addNotification(data) {
+          notifEmpty.style.display = "none";
+          notifList.style.display = "block";
+
+          const li = document.createElement("li");
+          li.style.marginBottom = "0.65rem";
+          li.setAttribute("data-qa", "patient-notif-item");
+          li.setAttribute("data-event", data.event);
+
+          const label = document.createElement("div");
+          label.textContent = eventLabel(data.event);
+          label.setAttribute("data-qa", "patient-notif-item-label");
+
+          const meta = document.createElement("div");
+          meta.className = "muted";
+          meta.style.fontSize = "0.85rem";
+          meta.style.marginTop = "0.2rem";
+          const when = data.timestamp
+            ? new Date(data.timestamp).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+            : "just now";
+          meta.textContent = `Appointment #${data.appointmentId} · ${when}`;
+          meta.setAttribute("data-qa", "patient-notif-item-meta");
+
+          li.appendChild(label);
+          li.appendChild(meta);
+          notifList.prepend(li);
+
+          log(data);
+        }
+
+        function connectWebSocket(token) {
+          const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+          const ws = new WebSocket(`${wsProto}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+
+          ws.onopen = () => {
+            wsStatus.textContent = "Connected — waiting for updates";
+            wsStatus.setAttribute("data-qa-ws", "connected");
+          };
+
+          ws.onmessage = (e) => {
+            try {
+              const data = JSON.parse(e.data);
+              addNotification(data);
+            } catch {
+              log("Received non-JSON message: " + e.data);
+            }
+          };
+
+          ws.onclose = (e) => {
+            wsStatus.textContent = e.wasClean ? "Disconnected" : "Connection lost — refresh to reconnect";
+            wsStatus.setAttribute("data-qa-ws", "disconnected");
+          };
+
+          ws.onerror = () => {
+            wsStatus.textContent = "Connection error";
+            wsStatus.setAttribute("data-qa-ws", "error");
+          };
+        }
+
+        function applySessionUi() {
+          window.ClinicNav.refresh();
+          const user = window.ClinicApp.getUser();
+          const t = window.ClinicApp.getToken();
+          if (user && user.role === "patient" && t) {
+            notifGuestGate.style.display = "none";
+            notifSection.style.display = "block";
+            connectWebSocket(t);
+          } else {
+            notifGuestGate.style.display = "block";
+            notifSection.style.display = "none";
+          }
+        }
+
+        window.ClinicNav.bindLogout(() => {
+          notifSection.style.display = "none";
+          notifGuestGate.style.display = "block";
+          window.ClinicNav.refresh();
+        });
+
+        applySessionUi();
+      })();
+    </script>
+  </body>
+</html>

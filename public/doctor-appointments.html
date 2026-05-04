@@ -58,6 +58,9 @@
       <pre id="log" style="margin-top: 0.5rem" data-qa="doctor-appt-tech-log">—</pre>
     </details>
 
+    <span id="wsStatus" data-qa="doctor-ws-status" style="display:none"></span>
+    <div id="wsToast" data-qa="doctor-ws-toast" style="display:none;position:fixed;top:1rem;right:1rem;background:#1e3a5f;color:#fff;padding:.75rem 1.25rem;border-radius:.5rem;z-index:9999;font-size:.9rem;max-width:320px"></div>
+
     <script src="/js/app-core.js"></script>
     <script src="/js/app-nav.js"></script>
     <script src="/js/doctor-shell.js"></script>
@@ -249,14 +252,15 @@
               );
             }
             log(updated);
-            bannerSuccess.textContent =
+            const successMsg =
               action === "confirm"
                 ? "Visit confirmed for the patient."
                 : action === "cancel-as-doctor"
                   ? "Visit was cancelled for the patient."
                   : "Request was turned down.";
-            bannerSuccess.style.display = "block";
             await loadAppointments();
+            bannerSuccess.textContent = successMsg;
+            bannerSuccess.style.display = "block";
           } catch (err) {
             const msg =
               err.body && typeof err.body === "object" && err.body.message
@@ -312,6 +316,39 @@
         window.ClinicNav.refresh();
         loadAppointments().catch((e) => log({ status: e.status, body: e.body }));
         loadWaitlist().catch(() => {});
+
+        // WebSocket — real-time notifications
+        const wsToken = window.ClinicApp.getToken();
+        const wsStatusEl = document.getElementById("wsStatus");
+        const toastEl = document.getElementById("wsToast");
+
+        function showToast(msg) {
+          toastEl.textContent = msg;
+          toastEl.style.display = "block";
+          clearTimeout(toastEl._timer);
+          toastEl._timer = setTimeout(() => { toastEl.style.display = "none"; }, 5000);
+        }
+
+        if (wsToken) {
+          const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+          const ws = new WebSocket(`${wsProto}//${location.host}/ws?token=${wsToken}`);
+
+          ws.onopen = () => {
+            wsStatusEl.setAttribute("data-qa-ws", "connected");
+          };
+
+          ws.onmessage = (e) => {
+            try {
+              const data = JSON.parse(e.data);
+              if (data.event === "appointment.booked") {
+                showToast("New booking received — refresh to see it");
+              } else if (data.event === "appointment.cancelled_by_patient") {
+                showToast("A patient cancelled their appointment");
+              }
+              loadAppointments().catch(() => {});
+            } catch {}
+          };
+        }
       })();
     </script>
   </body>

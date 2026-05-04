@@ -1,6 +1,7 @@
 const dotenv = require("dotenv");
 const fs = require("fs");
 const path = require("path");
+const http = require("http");
 dotenv.config();
 const { migrate } = require("./db/migrate");
 migrate();
@@ -10,13 +11,13 @@ const metrics = require("./metrics");
 const appointmentsRepository = require("./repositories/appointmentsRepository");
 const app = require("./app");
 const env = require("./config/env");
+const { createWsServer } = require("./ws/wsServer");
 
 const publicDirCheck = path.join(__dirname, "..", "public");
 for (const name of [
   "index.html",
   "patient.html",
   "patient-booking.html",
-  "patient-schedule.html",
   "patient-appointments.html",
   "patient-account.html",
   "doctor.html",
@@ -40,7 +41,10 @@ for (const name of [
   }
 }
 
-app.listen(env.PORT, () => {
+const httpServer = http.createServer(app);
+createWsServer(httpServer);
+
+httpServer.listen(env.PORT, () => {
   logger.info(
     {
       port: env.PORT,
