@@ -1,23 +1,49 @@
 const db = require("../db/connection");
 const { getNextWaitlistEntry, deleteWaitlistEntryById } = require("./waitlistRepository");
+const { isValidTransition } = require("../utils/appointmentStateMachine");
 
 /**
- * Must be called inside an existing db.transaction() — promotes the oldest
- * waitlist entry to a new pending appointment and marks the slot unavailable again.
- * No-op if the waitlist is empty for this slot.
+ * Must be called inside an existing db.transaction() — finds the next eligible
+ * waitlist patient and either promotes them directly (no active booking) or
+ * creates a waitlist_offer (patient already has a booking and needs to choose).
+ * No-op if the waitlist is empty or no eligible patient exists.
  */
 function promoteFromWaitlist(slotId, now) {
   const slot = db.prepare("SELECT doctorId FROM slots WHERE id = ?").get(slotId);
   if (!slot) return;
-  const entry = getNextWaitlistEntry(slot.doctorId);
+  const entry = getNextWaitlistEntry(slot.doctorId, slotId);
   if (!entry) return;
-  db
+
+  const existingAppt = db
     .prepare(
-      "INSERT INTO appointments (slotId, patientId, status, createdAt, updatedAt, deletedAt) VALUES (?, ?, ?, ?, ?, ?)"
+      `SELECT a.id FROM appointments a
+       INNER JOIN slots s ON s.id = a.slotId
+       WHERE s.doctorId = ? AND a.patientId = ? AND a.status IN ('pending', 'confirmed') AND a.deletedAt IS NULL`
     )
-    .run(slotId, entry.patientId, "pending", now, now, null);
-  db.prepare("UPDATE slots SET isAvailable = 0 WHERE id = ?").run(slotId);
-  deleteWaitlistEntryById(entry.id);
+    .get(slot.doctorId, entry.patientId);
+
+  if (!existingAppt) {
+    // Direct promotion — patient has no conflicting booking
+    db
+      .prepare(
+        "INSERT INTO appointments (slotId, patientId, status, createdAt, updatedAt, deletedAt) VALUES (?, ?, ?, ?, ?, ?)"
+      )
+      .run(slotId, entry.patientId, "pending", now, now, null);
+    db.prepare("UPDATE slots SET isAvailable = 0 WHERE id = ?").run(slotId);
+    deleteWaitlistEntryById(entry.id);
+  } else {
+    // Patient already has a booking — create an offer and hold the slot
+    const ttlHours = parseInt(process.env.WAITLIST_OFFER_TTL_HOURS || "24", 10);
+    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
+    db
+      .prepare(
+        `INSERT INTO waitlist_offers (slotId, patientId, existingAppointmentId, status, expiresAt, createdAt, updatedAt)
+         VALUES (?, ?, ?, 'pending', ?, ?, ?)`
+      )
+      .run(slotId, entry.patientId, existingAppt.id, expiresAt, now, now);
+    db.prepare("UPDATE slots SET isAvailable = 0 WHERE id = ?").run(slotId);
+    // Waitlist entry stays until patient accepts or declines
+  }
 }
 
 function bookSlot({ slotId, patientId }) {
@@ -111,13 +137,7 @@ function cancelAppointmentByDoctor({ appointmentId, doctorRecordId }) {
       throw err;
     }
     const { status } = row;
-    if (status === "cancelled" || status === "rejected") {
-      const err = new Error("Appointment cannot be cancelled from this status");
-      err.status = 422;
-      err.errorCode = "INVALID_TRANSITION";
-      throw err;
-    }
-    if (status !== "pending" && status !== "confirmed") {
+    if (!isValidTransition(status, "cancelled")) {
       const err = new Error("Appointment cannot be cancelled from this status");
       err.status = 422;
       err.errorCode = "INVALID_TRANSITION";
@@ -148,13 +168,7 @@ function cancelAppointmentByPatient({ appointmentId, patientId }) {
       throw err;
     }
     const { status } = appointment;
-    if (status === "cancelled" || status === "rejected") {
-      const err = new Error("Appointment cannot be cancelled from this status");
-      err.status = 422;
-      err.errorCode = "INVALID_TRANSITION";
-      throw err;
-    }
-    if (status !== "pending" && status !== "confirmed") {
+    if (!isValidTransition(status, "cancelled")) {
       const err = new Error("Appointment cannot be cancelled from this status");
       err.status = 422;
       err.errorCode = "INVALID_TRANSITION";
@@ -191,7 +205,7 @@ function confirmAppointmentByDoctor({ appointmentId, doctorRecordId }) {
       err.errorCode = "FORBIDDEN";
       throw err;
     }
-    if (row.status !== "pending") {
+    if (!isValidTransition(row.status, "confirmed")) {
       const err = new Error("Invalid status transition");
       err.status = 422;
       err.errorCode = "INVALID_TRANSITION";
@@ -226,7 +240,7 @@ function rejectAppointmentByDoctor({ appointmentId, doctorRecordId }) {
       err.errorCode = "FORBIDDEN";
       throw err;
     }
-    if (row.status !== "pending") {
+    if (!isValidTransition(row.status, "rejected")) {
       const err = new Error("Invalid status transition");
       err.status = 422;
       err.errorCode = "INVALID_TRANSITION";
@@ -274,4 +288,5 @@ module.exports = {
   getAppointmentsByDoctorId,
   getAppointmentById,
   expireStalePendingAppointments,
+  promoteFromWaitlist,
 };

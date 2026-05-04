@@ -1,9 +1,13 @@
 const express = require("express");
 const appointmentsRepository = require("../repositories/appointmentsRepository");
 const waitlistRepository = require("../repositories/waitlistRepository");
+const offersRepository = require("../repositories/offersRepository");
 const metrics = require("../metrics");
 const { requireAuth, requireRoles } = require("../middlewares/auth");
 const { bookingLimiter } = require("../middlewares/rate-limit");
+const { notify } = require("../services/notificationService");
+const { notifyDoctor, notifyPatient } = require("../ws/wsNotifier");
+const { getDoctorBySlotId } = require("../repositories/slotsRepository");
 
 const router = express.Router();
 
@@ -119,6 +123,8 @@ router.post("/", bookingLimiter, requireAuth, requireRoles("patient"), (req, res
       "slot booked"
     );
     res.status(201).json(appointment);
+    const slotRow = getDoctorBySlotId(slotId);
+    if (slotRow) notifyDoctor(slotRow.doctorId, "appointment.booked", { appointmentId: appointment.id, patientId, status: appointment.status });
   } catch (e) {
     next(e);
   }
@@ -150,6 +156,9 @@ router.patch("/:id/cancel", requireAuth, requireRoles("patient"), (req, res, nex
       "patient cancelled appointment"
     );
     res.status(200).json(updated);
+    notify("appointment.cancelled_by_patient", { appointmentId: updated.id, patientId: updated.patientId, status: updated.status });
+    const cancelledSlot = getDoctorBySlotId(updated.slotId);
+    if (cancelledSlot) notifyDoctor(cancelledSlot.doctorId, "appointment.cancelled_by_patient", { appointmentId: updated.id, patientId: updated.patientId, status: updated.status });
   } catch (e) {
     next(e);
   }
@@ -187,6 +196,8 @@ router.patch("/:id/confirm", requireAuth, requireRoles("doctor"), (req, res, nex
       "doctor confirmed appointment"
     );
     res.status(200).json(updated);
+    notify("appointment.confirmed", { appointmentId: updated.id, patientId: updated.patientId, status: updated.status });
+    notifyPatient(updated.patientId, "appointment.confirmed", { appointmentId: updated.id, status: updated.status });
   } catch (e) {
     next(e);
   }
@@ -224,6 +235,8 @@ router.patch("/:id/reject", requireAuth, requireRoles("doctor"), (req, res, next
       "doctor rejected appointment"
     );
     res.status(200).json(updated);
+    notify("appointment.rejected", { appointmentId: updated.id, patientId: updated.patientId, status: updated.status });
+    notifyPatient(updated.patientId, "appointment.rejected", { appointmentId: updated.id, status: updated.status });
   } catch (e) {
     next(e);
   }
@@ -261,8 +274,47 @@ router.patch("/:id/cancel-as-doctor", requireAuth, requireRoles("doctor"), (req,
       "doctor cancelled visit"
     );
     res.status(200).json(updated);
+    notify("appointment.cancelled_by_doctor", { appointmentId: updated.id, patientId: updated.patientId, status: updated.status });
+    notifyPatient(updated.patientId, "appointment.cancelled_by_doctor", { appointmentId: updated.id, status: updated.status });
   } catch (e) {
     next(e);
+  }
+});
+
+router.get("/waitlist-offers", requireAuth, requireRoles("patient"), (req, res) => {
+  const offers = offersRepository.getPendingOffersForPatient(req.user.id);
+  res.status(200).json(offers);
+});
+
+router.post("/waitlist-offers/:offerId/accept", requireAuth, requireRoles("patient"), (req, res, next) => {
+  const offerId = parsePositiveIntegerParam(req.params.offerId);
+  if (offerId === null) {
+    const err = new Error("Invalid offer id");
+    err.status = 400;
+    err.errorCode = "VALIDATION_ERROR";
+    return next(err);
+  }
+  try {
+    const result = offersRepository.acceptOffer({ offerId, patientId: req.user.id });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/waitlist-offers/:offerId/decline", requireAuth, requireRoles("patient"), (req, res, next) => {
+  const offerId = parsePositiveIntegerParam(req.params.offerId);
+  if (offerId === null) {
+    const err = new Error("Invalid offer id");
+    err.status = 400;
+    err.errorCode = "VALIDATION_ERROR";
+    return next(err);
+  }
+  try {
+    const result = offersRepository.declineOffer({ offerId, patientId: req.user.id });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
   }
 });
 

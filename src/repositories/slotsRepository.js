@@ -81,9 +81,14 @@ function deleteOwnedSlotIfUnused(p) {
   run();
 }
 
+function getDoctorBySlotId(slotId) {
+  return db.prepare("SELECT doctorId FROM slots WHERE id = ?").get(Number(slotId));
+}
+
 module.exports = {
   getAvailableByDoctorId,
   getSlotsByDoctorId,
   insertSlot,
   deleteOwnedSlotIfUnused,
+  getDoctorBySlotId,
 };

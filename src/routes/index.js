@@ -4,7 +4,7 @@ const router = express.Router();
 
 router.get("/", (req, res) => {
   res.status(200).json({
-    name: "clinic-booking-api-learning",
+    name: "clinic-booking-api",
     version: "1.0.0",
     environment: env.NODE_ENV,
   });
