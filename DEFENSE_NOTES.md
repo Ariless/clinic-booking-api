@@ -100,6 +100,19 @@ Order in this repo (see `src/app.js`):
 - Dedicated 404 middleware keeps "unknown route" behavior explicit and consistent.
 - Stable error contract (`errorCode`, `message`, `requestId`) improves QA automation and client integration.
 
+## Observability-driven testing
+
+The companion test repo (`clinic-booking-api-tests`) includes `observability.loki.test.js` — tests that go beyond HTTP assertions and verify the system logged the right thing:
+
+1. After `POST /api/v1/appointments`, query Loki for the `X-Request-Id` returned in the response header — assert the log entry appeared.
+2. Parse the log line and assert `event=appointment.booked`, correct `patientId` and `appointmentId`.
+
+**Why this matters:** most QA automation stops at the HTTP boundary. Verifying that the system emits the correct structured log entry proves the observability contract — not just that the API responded correctly, but that the internal state was recorded as expected. In production systems, structured logs are the primary signal for incident investigation.
+
+**Interview line:** *"I have tests that query Loki after an API call and assert the structured log entry appeared with the correct event, requestId, and domain fields. It's one of the few QA signals that crosses the HTTP boundary and validates observability, not just functionality."*
+
+**Stack:** `docker-compose.observability.yml` — Loki + Promtail + Grafana on `:3030`. Promtail scrapes Pino JSON from the Docker container. Tests use Loki's query_range API with a polling loop (15s timeout) to account for Promtail ingestion delay.
+
 ## Step 6 completed (config / env)
 
 - Centralized env in `src/config/env.js`: `PORT`, `NODE_ENV`, **`DATABASE_PATH`** (relative path like `./data/clinic.db`).
@@ -156,6 +169,25 @@ Order in this repo (see `src/app.js`):
 
 **Interview line:** *"I noticed that doctor registration only validates the record ID exists — there's no ownership proof or admin gate. In production I'd add an invite token or admin approval step."*
 
+## Payments — online consultations
+
+- **Endpoint:** `POST /api/v1/consultations` — separate paid service, does not touch the appointments flow.
+- **Feature flag:** `PAYMENT_MODE=disabled|mock_success|mock_fail` — same pattern as `ENABLE_AI_RECOMMENDATION`. Default `disabled` → `503 FEATURE_DISABLED`. Existing tests never see payment logic.
+- **Mock provider:** `src/services/paymentService.js` — `charge()` returns success or failure based on env var. No external dependency.
+- **DB tables:** `consultations` + `payments`. Payment record written on both success and failure — `consultationId` is `null` on failure. This preserves a full audit trail of charge attempts.
+- **Idempotency:** `X-Idempotency-Key` header — if key already exists in `payments` table for this patient, return cached result without re-charging. First call → `201`, replay → `200`, same `consultationId`.
+- **402 Payment Required** — consultation row is never created if payment fails. DB assertion proves it.
+- **Interview line:** "I implemented idempotency the way real payment APIs work — the client sends a unique key, and the server guarantees exactly-once processing. The test proves it at the DB level: two requests with the same key produce exactly one payment row."
+
+## WebSocket notifications
+
+- **Endpoint:** `ws://localhost:3000/ws?token=<JWT>` — same port as HTTP; Node's `http.Server` detects the upgrade handshake and routes it to `WebSocketServer`.
+- **Auth:** JWT extracted from query string on connect; invalid or missing → `ws.close(4001)`; patient role → `close(4003)`. Same `jwt.verify()` + `usersRepository.getPublicById` as HTTP middleware.
+- **Connection store:** `src/ws/connections.js` — `Map<doctorRecordId, Set<ws>>`; one doctor can have multiple browser tabs open. Added on connect, removed on `close` and `error`.
+- **Events pushed to doctor:** `appointment.booked` (patient books) and `appointment.cancelled_by_patient` (patient cancels). `wsNotifier.notifyDoctor()` iterates the Set and calls `ws.send()` for each `OPEN` socket.
+- **UI:** `doctor-appointments.html` — on `ws.onmessage` shows a toast and calls `loadAppointments()` to refresh the list without F5.
+- **Interview line:** "HTTP and WebSocket share port 3000. The server detects the upgrade handshake and routes it separately. Doctors hold a persistent connection; the server pushes events without polling. Invalid token → 4001, wrong role → 4003 — the same auth logic as HTTP, just applied at connection time instead of per-request."
+
 ## AI (demo)
 
 - **`POST /api/v1/ai/recommend-doctor`** — rule-based **`src/services/aiRecommendation.js`** (keywords → allowed specialty → `doctorsRepository.getBySpecialty`); **422** `UNKNOWN_SPECIALTY` when no match.
@@ -207,13 +239,58 @@ Order in this repo (see `src/app.js`):
 
 ---
 
+## Test orthogonality map
+
+Every test file in the companion test repo covers a **unique risk dimension** — no two files test the same thing. The map (§17 in `TEST_STRATEGY.md`) lists all 36 files split by layer (API / E2E / UI), each with the single question it answers.
+
+**Interview line:** *"I maintain a test orthogonality map — a table of every test file and the unique risk dimension it covers. If two files answer the same question, one of them is a duplicate. If I add a new file, it must cover a new risk — otherwise it belongs in an existing file. It's a systems-thinking tool: coverage is designed, not accumulated."*
+
+---
+
+## CI prioritization rationale (risk vs infrastructure cost)
+
+Three suites are intentionally local-only, with explicit reasoning documented in §13 of `TEST_STRATEGY.md`:
+
+| Suite | Why excluded from CI |
+|---|---|
+| `chaos.test.js` | Needs a fault-injected SUT; runs via separate manual `chaos.yml` workflow |
+| `observability.loki.test.js` | Needs Loki stack sidecar; high infrastructure cost for the CI signal gained |
+| `rate-limit tests` | Parallel CI runs exhaust the rate window and produce false 429s; needs env override |
+
+Each exclusion has an unblocking condition. The point is that running these in the standard job would produce flaky failures caused by missing infrastructure — the exact failure-classification problem the framework is designed to avoid.
+
+**Interview line:** *"Not every test belongs in CI. I made three explicit exclusions: chaos tests need a fault-injected server, observability tests need a Loki stack, and rate-limit tests produce false 429s in parallel runs. Each has a documented unblocking condition. Putting them in CI anyway would make the pipeline unreliable — and an unreliable pipeline is worse than no pipeline."*
+
+---
+
+## Waitlist offer system (manual confirmation flow)
+
+The SUT implements a two-stage waitlist: when a slot frees up and the next queued patient already has an active booking, instead of automatic promotion an **offer** is created. The patient then decides:
+
+- **Accept** — old booking cancelled + old slot freed, new appointment created on the freed slot, waitlist entry removed.
+- **Decline** — original booking unchanged, patient stays on waitlist, freed slot offered to the next eligible patient.
+
+Key design decisions:
+- Declined patients are skipped for the same slot (NOT EXISTS on `waitlist_offers.status = 'declined'`) but stay in the queue for future slots.
+- `promoteFromWaitlist` is called inside the decline transaction so the slot is immediately re-offered — no async delay.
+- Offers have a configurable TTL (`WAITLIST_OFFER_TTL_HOURS`, default 24h) to prevent indefinitely held slots.
+- Direct promotion (no existing booking) still works atomically in the same transaction — offer path is only triggered when a conflict exists.
+
+Files: `src/repositories/offersRepository.js`, `src/repositories/waitlistRepository.js`, `src/db/migrate.js` (table `waitlist_offers`), routes in `src/routes/appointmentsRoutes.js`.
+
+Tests: `appointments.waitlist.offers.test.js` — 4 tests: GET pending offers, accept (swap), decline (keep original), 409 on double-accept.
+
+**Interview line:** *"The waitlist has two modes: if the patient has no existing booking, they're promoted automatically in the same transaction. If they do have a booking, I create an offer and hold the slot — the patient accepts to swap or declines to stay in queue. A declined patient is excluded from the next promotion for that specific slot but stays eligible for future freed slots. This prevents an infinite offer loop after each decline."*
+
+---
+
 ## Next slices (suggested)
 
 Already in the codebase (no longer “next” for these): **user** soft-delete, **doctor** cancel visit (`PATCH …/cancel-as-doctor`), **DB** partial unique guard for double active booking per slot, **refresh JWTs**, slot **overlap** check per doctor, **`X-Request-Id`** on responses.
 
 Reasonable follow-ups when you want to go deeper:
 
-- **Backend:** optional soft delete on **appointments** rows (today lifecycle is status-only); **external AI** (e.g. Anthropic) behind a feature flag instead of/in addition to `aiRecommendation.js`; rate limits; richer `/health` (DB ping).
+- **Backend:** optional soft delete on **appointments** rows (today lifecycle is status-only); **external AI** (e.g. Anthropic) behind a feature flag instead of/in addition to `aiRecommendation.js`; richer `/health` (DB ping); **WebSocket notifications** — real-time push to doctor's browser (webhook outbound is already implemented in `src/services/notificationService.js`).
 - **Frontend:** more UX polish; **CORS** if the UI is served from another origin (e.g. Vite dev server).
 - **Tests:** **Supertest** / **Playwright** when you start the automated test track (deferred by choice).
 

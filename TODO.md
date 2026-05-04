@@ -6,6 +6,14 @@
 
 ---
 
+## Known limitations
+
+- **Waitlist double-booking** — ✅ fixed 2026-05-02. `getNextWaitlistEntry` in `waitlistRepository.js` now skips patients who already have an active (`pending`/`confirmed`) appointment with the same doctor (`NOT EXISTS` subquery). Test: `appointments.waitlist.promotion.test.js` — "patient with active appointment is skipped during waitlist promotion".
+
+- **Waitlist offer system (Variant B)** — ✅ implemented 2026-05-02. When a slot frees up and the next waitlist patient already has an active booking, an offer is created instead of immediate promotion. Patient accepts (old booking cancelled, new one created, waitlist removed) or declines (stays on waitlist, slot offered to next person). `promoteFromWaitlist` export fix applied. Tests: `appointments.waitlist.offers.test.js` (4 tests, all passing).
+
+---
+
 ## Code cleanup backlog (from internal audit, 2026-04)
 
 Addressed in a hygiene pass:

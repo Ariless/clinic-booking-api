@@ -80,7 +80,10 @@ You do **not** need all four on every test; use **API for coverage density**, **
 3. **Rate limit:** rapid **`POST /api/v1/ai/recommend-doctor`** → **`429`** `RATE_LIMITED` — throttle tests or space calls.
 4. **Feature off:** `ENABLE_AI_RECOMMENDATION=false` → **`503`** `FEATURE_DISABLED` (assert stable code).
 5. **Chaos mode:** `CHAOS_ENABLED=true CHAOS_FAIL_PROBABILITY=1` → every `/api/v1` request returns **`503`** `CHAOS_ERROR`; **`GET /health`** is unaffected (mounted outside `/api/v1`). Companion framework test: `chaos.test.js` (skip guard; requires server restart with fault-injection env).
-6. **Concurrency narrative:** with **`NODE_ENV=development`** and **`ENABLE_DEBUG_ROUTES=true`**, **`POST /api/v1/debug/simulate-concurrent-booking`** documents sequential double-book; for **true** races use **two parallel HTTP clients** from your runner (same body shape as in **`API_ENDPOINTS.md`**).
+6. **Webhook notifications:** `WEBHOOK_URL=http://localhost:9001` → SUT POSTs `{ event, appointmentId, patientId, status, timestamp }` after confirm / reject / cancel; webhook failure does not affect the appointment (fire-and-forget). Companion framework tests: `notifications.webhook.test.js` + E2E in `booking.cross-layer.test.js` — both use a mock HTTP server as receiver (skip guard; requires server restart with `WEBHOOK_URL` set).
+7. **WebSocket notifications:** connect as doctor via `ws://localhost:3000/ws?token=<JWT>`; patient books → doctor receives `{ event: "appointment.booked", appointmentId, patientId, status, timestamp }` in real time without polling; invalid token → close code `4001`; `doctor-appointments.html` shows a toast and auto-reloads the list. Companion framework tests: `notifications.ws.test.js` (3 tests; no extra env vars needed — standard `npm run dev`).
+8. **Payments + idempotency:** `PAYMENT_MODE=mock_success` → `POST /api/v1/consultations` charges and creates a DB record; `mock_fail` → `402 PAYMENT_REQUIRED`, consultation row not created (assert via DB). `X-Idempotency-Key` header: same key twice → second call returns cached result, exactly one payment row in DB. Companion framework tests: `consultations.payment.test.js` (6 tests; skip guards per mode).
+9. **Concurrency narrative:** with **`NODE_ENV=development`** and **`ENABLE_DEBUG_ROUTES=true`**, **`POST /api/v1/debug/simulate-concurrent-booking`** documents sequential double-book; for **true** races use **two parallel HTTP clients** from your runner (same body shape as in **`API_ENDPOINTS.md`**).
 
 ---
 
@@ -129,6 +132,8 @@ Use a **two-repo** story only if both exist: **(1) SUT** — this service + demo
 - Demo **multi-page UI** under `public/` with stable **`data-qa`** selectors (conventions in **`quality-strategy.md`**).
 - **Rate-limited** AI recommend endpoint (rule-based); **debug** booking race helper under strict env flags (**`API_ENDPOINTS.md`**).
 - **Lint CI** on this repo; automated **Playwright/API suites** belong in the **framework** repo once you ship them.
+- **Unit + property-based tests** on `appointmentStateMachine.js` (Jest + fast-check) + **mutation testing** (Stryker, 92% score) — say "I apply testing at multiple levels: I know when a unit test or property-based check adds more value than an E2E test."
+- **Observability-driven tests** (`observability.loki.test.js`) — after each API call, query Loki and assert the structured log entry appeared with correct `requestId`, `event`, and `patientId`; say "I test beyond the HTTP boundary — I verify the system logs the right thing, not just that it responds correctly."
 
 **Do not imply these are already live in the SUT** (unless you implement or simulate them in the framework and say so explicitly):
 

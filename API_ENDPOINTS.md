@@ -12,6 +12,16 @@ Base: `http://localhost:3000` (see `PORT` in `.env`). Versioned API: **`/api/v1`
 
 ## Implemented
 
+## WebSocket
+
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `ws://localhost:3000/ws?token=<JWT>` | Doctor JWT (access token only) | Persistent connection; server pushes `{ event, appointmentId, patientId, status, timestamp }` when patient books (`appointment.booked`) or cancels (`appointment.cancelled_by_patient`); invalid/missing token → close `4001`; patient role → close `4003` |
+
+---
+
+## Implemented
+
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | `GET` | `/` | — | Demo UI (`index.html`); other HTML under `/patient/…`, `/doctor/…`, `/login`, `/register*` |
@@ -56,6 +66,19 @@ Base: `http://localhost:3000` (see `PORT` in `.env`). Versioned API: **`/api/v1`
 
 ---
 
+## Consultations (paid service)
+
+Requires `PAYMENT_MODE=mock_success` or `mock_fail` (default `disabled` → 503 `FEATURE_DISABLED`).
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/api/v1/consultations` | Patient JWT | Book a paid online consultation `{ doctorId, paymentMethod }` → `201 { consultation, payment }` on success; `402 PAYMENT_REQUIRED` if card declined (no consultation created); `503 FEATURE_DISABLED` if `PAYMENT_MODE=disabled`; `404 DOCTOR_NOT_FOUND` for unknown doctor. Optional header: `X-Idempotency-Key` — same key returns cached result without re-charging. |
+| `GET` | `/api/v1/consultations/me` | Patient JWT | List caller's consultations |
+
+**Payment record** always written (succeeded or failed). `consultationId` is `null` on failure.
+
+---
+
 ## Deferred (not in this codebase yet)
 
 | Area | Notes |
@@ -95,5 +118,6 @@ Base: `http://localhost:3000` (see `PORT` in `.env`). Versioned API: **`/api/v1`
 | `CHAOS_FAIL_PROBABILITY` | Float 0–1 — probability each `/api/v1` request returns `503` `CHAOS_ERROR` (default `0.2`) |
 | `CHAOS_LATENCY_MS` | Non-negative int — max ms of random delay on non-failing requests (default `0`) |
 | `CHAOS_SEED` | String seed for deterministic Mulberry32 RNG; unset = `Math.random()` |
+| `WEBHOOK_URL` | Optional URL to receive appointment status-change events (confirmed / rejected / cancelled); omit to disable; payload: `{ event, appointmentId, patientId, status, timestamp }` |
 
 See **`.env.example`**. Logging: **`README.md` → Logging (observability)**. Quality gates: **`quality-strategy.md`**.

@@ -27,6 +27,22 @@ The static demo under `public/*.html` is the surface future **Playwright** (or s
 
 **Legacy note:** `patient-schedule.html` still uses shortened **`schedule-*`** on some inner controls; new hooks on that page should prefer **`patient-schedule-*`** (and older `schedule-*` ids can be migrated when touched).
 
+## Testing levels — why each layer exists
+
+This project applies testing at multiple levels deliberately, not just E2E. The goal is to show understanding of *where* a given type of check adds value — not to hit coverage numbers.
+
+| Level | Tool | What it catches | Lives in |
+|---|---|---|---|
+| Unit | Jest | Logic errors in pure functions (state machine, utilities) | `src/utils/__tests__/` |
+| Property-based | fast-check (via Jest) | Invariant violations across the full input space | `src/utils/__tests__/` |
+| Mutation | Stryker | Tests that pass even when logic is wrong (survive a mutant) | `npm run test:mutation` |
+| API | Playwright | Contract, RBAC, status transitions, error shapes | framework repo |
+| E2E / cross-layer | Playwright | UI → API → DB consistency | framework repo |
+
+**Property-based testing** (`src/utils/__tests__/appointmentStateMachine.test.js`) uses **fast-check** to generate all `(from, to)` status combinations and assert that `isValidTransition` always returns a boolean and never throws. The pattern originated in Haskell's **QuickCheck** (1999) and was ported to JS as fast-check. Unlike hand-picked examples, the generator explores the full input space and finds counter-examples automatically — if a new status is added without updating the state machine, the property test catches it.
+
+**Interview framing:** unit and property-based tests live in the SUT repo because `appointmentStateMachine.js` is a domain utility that belongs to the service. Writing tests at this level — alongside mutation testing — demonstrates that QA involvement is not limited to black-box API or UI checks: it spans understanding of where each testing technique adds the most value.
+
 ## Deferred (by design)
 
 - **Automated API / E2E tests** — not wired yet; the goal is to add **Playwright** and targeted API checks once flows are stable enough that tests are explanatory rather than noise. Until then, manual exploratory testing and lint are the primary gates.
@@ -42,4 +58,4 @@ The static demo under `public/*.html` is the surface future **Playwright** (or s
 
 **Current (in this repo):** the API uses **Pino** (`src/logger.js`) and **pino-http** for structured JSON logs (one object per line), with **`X-Request-Id` / `requestId`** correlation and redaction of **`Authorization`** / **`Cookie`**. Domain handlers use stable **`event`** fields where it helps investigations. For SUT readers, **`README.md`** covers the HTTP **error contract**; this *Logging* section is the deeper note.
 
-**Planned (not implemented in the project yet):** when automated tests (**Playwright** + API checks) are added, the intention is to combine that layer with **Grafana + Loki** — ship or scrape the same JSON log lines into Loki, explore and filter them in Grafana (timestamps, `level`, `requestId`, `event`), and use that stack for learning and demos (incident-style queries, “logs vs metrics”). No Docker Compose / Promtail / Loki wiring is committed until that work starts; this paragraph is only the agreed direction.
+**Implemented (2026-05-02):** `docker-compose.observability.yml` adds Loki + Promtail + Grafana to the base stack. Promtail scrapes Pino JSON from the Docker container, Loki ingests, Grafana is available at `http://localhost:3030` (anonymous admin). Dashboard covers log rate by level, all logs, errors/warnings, and domain events. Start with `docker-compose -f docker-compose.yml -f docker-compose.observability.yml up`. Next step: observability-driven tests in the companion test repo — assert that `requestId` and domain `event` fields appear in Loki after each API call.
