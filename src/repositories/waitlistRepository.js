@@ -75,11 +75,23 @@ function deleteWaitlistEntryForPatient({ entryId, patientId }) {
   return { id: entryId, removed: true };
 }
 
-/** Returns the oldest waitlist entry for a doctor. Called inside an existing transaction. */
-function getNextWaitlistEntry(doctorId) {
+/** Returns the oldest waitlist entry for a doctor whose patient has not already declined
+ *  an offer for this specific slot. Called inside an existing transaction. */
+function getNextWaitlistEntry(doctorId, slotId) {
   return db
-    .prepare("SELECT * FROM slot_waitlist WHERE doctorId = ? ORDER BY createdAt ASC LIMIT 1")
-    .get(doctorId);
+    .prepare(
+      `SELECT w.* FROM slot_waitlist w
+       WHERE w.doctorId = ?
+       AND NOT EXISTS (
+         SELECT 1 FROM waitlist_offers o
+         WHERE o.patientId = w.patientId
+           AND o.slotId = ?
+           AND o.status = 'declined'
+       )
+       ORDER BY w.createdAt ASC
+       LIMIT 1`
+    )
+    .get(doctorId, slotId);
 }
 
 /** Deletes a waitlist entry by its primary key. Called inside an existing transaction. */

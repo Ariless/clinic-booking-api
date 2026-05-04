@@ -23,8 +23,9 @@
     <nav class="patient-subnav" aria-label="Patient workspace" data-qa="patient-nav">
       <a href="/patient" data-patient-nav="dashboard" data-qa="patient-nav-dashboard">Dashboard</a>
       <a href="/patient/booking" data-patient-nav="booking" data-qa="patient-nav-booking">Booking</a>
-      <a href="/patient/schedule" data-patient-nav="schedule" data-qa="patient-nav-schedule">Schedule</a>
       <a href="/patient/appointments" data-patient-nav="appointments" data-qa="patient-nav-appointments">Appointments</a>
+      <a href="/patient/consultations" data-patient-nav="consultations" data-qa="patient-nav-consultations">Consultations</a>
+      <a href="/patient/notifications" data-patient-nav="notifications" data-qa="patient-nav-notifications">Notifications</a>
       <a href="/patient/account" data-patient-nav="account" data-qa="patient-nav-account">Account</a>
     </nav>
 
@@ -33,7 +34,7 @@
     <div id="appointmentsGuestGate" class="empty-panel" style="display: none" data-qa="patient-appt-guest-gate">
       <p style="margin: 0 0 0.5rem">
         Saved visits are shown only when you <strong>sign in as a patient</strong>. As a guest you can still open
-        <a href="/patient/schedule">Schedule</a> or <a href="/patient/booking">Booking</a> to browse free times.
+        <a href="/patient/booking">Booking</a> to browse free times.
       </p>
       <p style="margin: 0">
         <a id="loginForAppt" href="/login" data-qa="patient-appt-guest-login">Sign in</a> ·
@@ -69,8 +70,14 @@
 
     <section id="waitlistSection" style="display: none; margin-top: 1.5rem" data-qa="patient-waitlist-section">
       <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="patient-waitlist-title">Waitlist</h2>
-      <p class="muted" style="margin: 0 0 0.75rem">You'll be booked automatically if an earlier slot opens up with these clinicians.</p>
+      <p class="muted" style="margin: 0 0 0.75rem">You'll be offered an earlier slot if one opens up with these clinicians.</p>
       <ul id="waitlistItems" data-qa="patient-waitlist-list"></ul>
+    </section>
+
+    <section id="offersSection" style="display: none; margin-top: 1.5rem" data-qa="patient-offers-section">
+      <h2 style="margin: 0 0 0.5rem; font-size: 1rem" data-qa="patient-offers-title">Earlier slot available</h2>
+      <p class="muted" style="margin: 0 0 0.75rem; font-size: 0.875rem">An earlier appointment opened up. Accept to swap your current booking, or decline to keep it.</p>
+      <ul id="offersList" data-qa="patient-offers-list"></ul>
     </section>
 
     <details class="technical" data-qa="patient-appt-tech-details">
@@ -101,6 +108,8 @@
         let cachedRows = [];
         const waitlistSection = document.getElementById("waitlistSection");
         const waitlistItemsEl = document.getElementById("waitlistItems");
+        const offersSection = document.getElementById("offersSection");
+        const offersListEl = document.getElementById("offersList");
 
         function log(obj) {
           logEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
@@ -341,11 +350,77 @@
           }
         });
 
+        async function loadOffers() {
+          const user = window.ClinicApp.getUser();
+          const t = window.ClinicApp.getToken();
+          if (!t || !user || user.role !== "patient") {
+            offersSection.style.display = "none";
+            return;
+          }
+          try {
+            const offers = await window.ClinicApp.api("/api/v1/appointments/waitlist-offers");
+            const list = Array.isArray(offers) ? offers : [];
+            if (!list.length) {
+              offersSection.style.display = "none";
+              return;
+            }
+            offersSection.style.display = "block";
+            offersListEl.innerHTML = "";
+            for (const o of list) {
+              const li = document.createElement("li");
+              li.setAttribute("data-qa", "patient-offer-item");
+              li.style.cssText = "display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid #e2e8f0;flex-wrap:wrap";
+              const expires = new Date(o.expiresAt).toLocaleString();
+              li.innerHTML = `<span style="flex:1;min-width:200px"><strong>${o.doctorName}</strong> — ${o.startTime ? new Date(o.startTime).toLocaleString() : ""}–${o.endTime ? new Date(o.endTime).toLocaleTimeString() : ""}<br><span class="muted" style="font-size:0.8rem">Offer expires ${expires}</span></span>`;
+              const acceptBtn = document.createElement("button");
+              acceptBtn.type = "button";
+              acceptBtn.textContent = "Accept";
+              acceptBtn.setAttribute("data-qa", "patient-offer-accept");
+              acceptBtn.dataset.offerId = String(o.id);
+              acceptBtn.dataset.action = "accept";
+              const declineBtn = document.createElement("button");
+              declineBtn.type = "button";
+              declineBtn.className = "secondary";
+              declineBtn.textContent = "Decline";
+              declineBtn.setAttribute("data-qa", "patient-offer-decline");
+              declineBtn.dataset.offerId = String(o.id);
+              declineBtn.dataset.action = "decline";
+              li.appendChild(acceptBtn);
+              li.appendChild(declineBtn);
+              offersListEl.appendChild(li);
+            }
+          } catch {
+            offersSection.style.display = "none";
+          }
+        }
+
+        offersListEl.addEventListener("click", async (e) => {
+          const btn = e.target.closest("button[data-offer-id]");
+          if (!btn) return;
+          const { offerId, action } = btn.dataset;
+          const label = action === "accept" ? "swap your booking for this earlier slot" : "decline this offer";
+          if (!window.confirm(`Are you sure you want to ${label}?`)) return;
+          btn.disabled = true;
+          try {
+            await window.ClinicApp.api(
+              `/api/v1/appointments/waitlist-offers/${encodeURIComponent(offerId)}/${action}`,
+              { method: "POST" }
+            );
+            await loadOffers();
+            await loadAppointments();
+            await loadWaitlist();
+          } catch (err) {
+            showNotice(err.body?.message || "Something went wrong. Please try again.");
+            btn.disabled = false;
+          }
+        });
+
         (async () => {
           try {
             applyListSessionUi();
             await loadAppointments();
             await loadWaitlist();
+            await loadOffers();
           } catch (e) {
             showNotice(humanListError(e));
             log({ status: e.status, body: e.body });
