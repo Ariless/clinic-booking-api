@@ -23,8 +23,9 @@
     <nav class="patient-subnav" aria-label="Patient workspace" data-qa="patient-nav">
       <a href="/patient" data-patient-nav="dashboard" data-qa="patient-nav-dashboard">Dashboard</a>
       <a href="/patient/booking" data-patient-nav="booking" data-qa="patient-nav-booking">Booking</a>
-      <a href="/patient/schedule" data-patient-nav="schedule" data-qa="patient-nav-schedule">Schedule</a>
       <a href="/patient/appointments" data-patient-nav="appointments" data-qa="patient-nav-appointments">Appointments</a>
+      <a href="/patient/consultations" data-patient-nav="consultations" data-qa="patient-nav-consultations">Consultations</a>
+      <a href="/patient/notifications" data-patient-nav="notifications" data-qa="patient-nav-notifications">Notifications</a>
       <a href="/patient/account" data-patient-nav="account" data-qa="patient-nav-account">Account</a>
     </nav>
 
@@ -48,11 +49,6 @@
           <h2 style="margin: 0 0 0.35rem; font-size: 1rem">Booking</h2>
           <p>Choose a clinician and reserve a time.</p>
           <a class="action" href="/patient/booking" data-qa="patient-dashboard-link-booking">Go to booking</a>
-        </div>
-        <div class="hub-card" data-qa="patient-dashboard-hub-schedule">
-          <h2 style="margin: 0 0 0.35rem; font-size: 1rem">Schedule</h2>
-          <p>See who still has openings before you book.</p>
-          <a class="action" href="/patient/schedule" data-qa="patient-dashboard-link-schedule">View schedule</a>
         </div>
         <div class="hub-card" data-qa="patient-dashboard-hub-appointments">
           <h2 style="margin: 0 0 0.35rem; font-size: 1rem">Appointments</h2>
@@ -108,7 +104,7 @@
               <ul>
                 <li><a href="/login">Sign in</a> if you already use this clinic online.</li>
                 <li><a href="/register/patient">Create a patient account</a> so your bookings stay under your email.</li>
-                <li>Browse <a href="/patient/schedule">open times</a> and <a href="/patient/booking">pick a slot</a> — saving a visit requires <a href="/login">sign-in</a> or <a href="/register/patient">registration</a>.</li>
+                <li><a href="/patient/booking">Pick a slot</a> — saving a visit requires <a href="/login">sign-in</a> or <a href="/register/patient">registration</a>.</li>
               </ul>
             </div>
           `;
@@ -119,7 +115,7 @@
             <div class="next-block">
               <h2>What you can do next</h2>
               <ul>
-                <li><a href="/patient/booking">Book a new visit</a> or check <a href="/patient/schedule">availability</a>.</li>
+                <li><a href="/patient/booking">Book a new visit</a>.</li>
                 <li><a href="/patient/appointments">Review or cancel</a> upcoming visits when cancellation is allowed.</li>
                 <li><a href="/patient/account">Check your profile</a> on file for this session.</li>
               </ul>

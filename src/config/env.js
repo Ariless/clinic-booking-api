@@ -70,6 +70,18 @@ const LOG_PRETTY = parseBool(process.env.LOG_PRETTY, false);
 /** When false, POST /api/v1/ai/recommend-doctor responds with 503 FEATURE_DISABLED. */
 const ENABLE_AI_RECOMMENDATION = parseBool(process.env.ENABLE_AI_RECOMMENDATION, true);
 
+/** rule_based: keyword regex matching; rag: retrieval + Claude (or mock). */
+const AI_IMPLEMENTATION = (() => {
+  const raw = process.env.AI_IMPLEMENTATION || "rule_based";
+  if (!["rule_based", "rag"].includes(raw)) {
+    throw new Error(`Invalid AI_IMPLEMENTATION: ${raw}`);
+  }
+  return raw;
+})();
+
+/** When true with AI_IMPLEMENTATION=rag, returns a deterministic mock response (no API key needed). */
+const AI_MOCK_RESPONSE = parseBool(process.env.AI_MOCK_RESPONSE, false);
+
 /** Sliding window for AI rate limit (ms). */
 const AI_RATE_LIMIT_WINDOW_MS = parsePositiveInt(process.env.AI_RATE_LIMIT_WINDOW_MS, 60_000);
 
@@ -142,6 +154,8 @@ const env = {
   LOG_LEVEL,
   LOG_PRETTY,
   ENABLE_AI_RECOMMENDATION,
+  AI_IMPLEMENTATION,
+  AI_MOCK_RESPONSE,
   AI_RATE_LIMIT_WINDOW_MS,
   AI_RATE_LIMIT_MAX,
   RATE_LIMIT_LOGIN_WINDOW_MS,

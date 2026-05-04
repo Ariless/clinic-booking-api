@@ -23,8 +23,9 @@
     <nav class="patient-subnav" aria-label="Patient workspace" data-qa="patient-nav">
       <a href="/patient" data-patient-nav="dashboard" data-qa="patient-nav-dashboard">Dashboard</a>
       <a href="/patient/booking" data-patient-nav="booking" data-qa="patient-nav-booking">Booking</a>
-      <a href="/patient/schedule" data-patient-nav="schedule" data-qa="patient-nav-schedule">Schedule</a>
       <a href="/patient/appointments" data-patient-nav="appointments" data-qa="patient-nav-appointments">Appointments</a>
+      <a href="/patient/consultations" data-patient-nav="consultations" data-qa="patient-nav-consultations">Consultations</a>
+      <a href="/patient/notifications" data-patient-nav="notifications" data-qa="patient-nav-notifications">Notifications</a>
       <a href="/patient/account" data-patient-nav="account" data-qa="patient-nav-account">Account</a>
     </nav>
 
@@ -33,9 +34,6 @@
     <p class="muted" style="margin: 0 0 1rem">
       Choose a <strong>specialty</strong>, then a <strong>clinician</strong>, then a <strong>day</strong> and
       <strong>time</strong>. Signed-in patients don’t need to type their clinic reference number — it’s filled for you.
-    </p>
-    <p id="scheduleDeepLinkPara" class="muted" style="margin: 0 0 1rem; display: none" data-qa="booking-deeplink-wrap">
-      <a id="scheduleDeepLink" href="#" data-qa="booking-deeplink-schedule">Only check times for this clinician →</a>
     </p>
 
     <div id="bannerError" class="banner-error" role="alert" data-qa="booking-banner-error"></div>
@@ -181,8 +179,6 @@
         const doctorsEmpty = document.getElementById("doctorsEmpty");
         const doctorsWrap = document.getElementById("doctorsWrap");
         const slotsEmpty = document.getElementById("slotsEmpty");
-        const scheduleDeepLinkPara = document.getElementById("scheduleDeepLinkPara");
-        const scheduleDeepLink = document.getElementById("scheduleDeepLink");
         const aiSymptomsEl = document.getElementById("aiSymptoms");
         const aiRecommendBtn = document.getElementById("aiRecommendBtn");
         const aiResultEl = document.getElementById("aiResult");
@@ -361,7 +357,6 @@
           specialtyEl.value = doc.specialty;
           refillDoctorSelectForSpecialty();
           doctorEl.value = id;
-          updateScheduleDeepLink();
           await loadSlots(id);
         }
 
@@ -377,6 +372,9 @@
             );
             if (!slots.length) {
               slotsEmpty.style.display = "block";
+              waitlistOffer.style.display = "block";
+              waitlistMsg.textContent = "";
+              joinWaitlistBtn.disabled = false;
               return;
             }
             slotsByDay = new Map();
@@ -444,8 +442,7 @@
             refillDoctorSelectForSpecialty();
             resetSlotPickers();
             slotsEmpty.style.display = "none";
-            updateScheduleDeepLink();
-            await loadSlots(doctorEl.value);
+              await loadSlots(doctorEl.value);
 
             let msg = `Recommended: ${specialty}.`;
             if (slotsByDay.size > 0) {
@@ -509,16 +506,6 @@
           applyBookingSessionUi();
         });
 
-        function updateScheduleDeepLink() {
-          const id = doctorEl.value;
-          if (id) {
-            scheduleDeepLink.href = `/patient/schedule?doctorId=${encodeURIComponent(id)}`;
-            scheduleDeepLinkPara.style.display = "block";
-          } else {
-            scheduleDeepLinkPara.style.display = "none";
-          }
-        }
-
         slotDayEl.addEventListener("change", () => {
           formMsgEl.textContent = "";
           const key = slotDayEl.value;
@@ -537,7 +524,6 @@
           refillDoctorSelectForSpecialty();
           resetSlotPickers();
           slotsEmpty.style.display = "none";
-          updateScheduleDeepLink();
           try {
             await loadSlots(doctorEl.value);
             log("Specialty changed.");
@@ -549,7 +535,6 @@
 
         doctorEl.addEventListener("change", async () => {
           hideBanners();
-          updateScheduleDeepLink();
           try {
             await loadSlots(doctorEl.value);
             log("Times updated.");
@@ -594,8 +579,7 @@
             applyBookingSessionUi();
             await loadDoctors();
             await applyDoctorFromUrl();
-            updateScheduleDeepLink();
-            log("Ready.");
+              log("Ready.");
           } catch (e) {
             showBannerError("Something went wrong while opening this page.");
             log({ status: e.status, body: e.body });
