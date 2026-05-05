@@ -1,0 +1,54 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/promtail-positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: clinic-api
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Keep only containers that have the logging=promtail label
+      - source_labels: [__meta_docker_container_label_logging]
+        regex: promtail
+        action: keep
+      # Set job label from the container label
+      - source_labels: [__meta_docker_container_label_logging_jobname]
+        target_label: job
+        replacement: clinic-api
+      # Set container label to the container name (strip leading /)
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.+)
+        target_label: container
+        replacement: $1
+
+    pipeline_stages:
+      # Parse Pino JSON log lines
+      - json:
+          expressions:
+            pino_level: level   # numeric: 30=info, 40=warn, 50=error, etc.
+            event: event        # domain event name, present only on domain logs
+            msg: msg
+
+      # Map numeric Pino levels to human-readable strings
+      - template:
+          source: pino_level
+          template: >-
+            {{ if eq .Value "10" }}trace
+            {{ else if eq .Value "20" }}debug
+            {{ else if eq .Value "30" }}info
+            {{ else if eq .Value "40" }}warn
+            {{ else if eq .Value "50" }}error
+            {{ else if eq .Value "60" }}fatal
+            {{ else }}unknown{{ end }}
+
+      # Promote to Loki labels (low cardinality only)
+      - labels:
+          level: pino_level
+          event:
