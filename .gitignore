@@ -23,6 +23,9 @@ coverage/
 .nyc_output/
 .eslintcache
 
+# Mutation testing reports
+reports/
+
 # Playwright (when added)
 test-results/
 playwright-report/
